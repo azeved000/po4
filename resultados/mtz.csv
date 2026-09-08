@@ -1,5 +1,3 @@
-n,usar_mtz,n_variaveis,n_restricoes,status,objetivo,limite_inferior,gap,tempo_s
-6,True,126,208,Optimal,780.0999999999999,780.0999999999999,0.0,1.602
-6,False,120,142,Not Solved,780.0999999999999,432.496,0.8,10.787
-10,True,366,652,Not Solved,1540.0000000000002,160.537,8.59,9.949
-10,False,356,394,Not Solved,621.4000000000001,142.3,3.37,10.012
+n,semente,usar_mtz,n_variaveis,n_restricoes,status,objetivo,limite_inferior,gap_percentual,tempo_s,otimo_provado,mensagem_solver
+6,6,True,126,208,Optimal,743.3,743.3,0.0,2.04,True,Optimal solution found
+6,6,False,120,142,Not Solved,743.3,293.449,153.0,5.083,False,Stopped on time limit

@@ -52,10 +52,15 @@ def _regua(caractere: str = "-", largura: int = LARGURA) -> str:
 
 
 def _numero(valor: float | None, casas: int = 2, vazio: str = "-") -> str:
-    """Formata número com vírgula decimal; ``None`` vira um traço."""
+    """Formata número no padrão brasileiro (1.234,56); ``None`` vira um traço."""
     if valor is None:
         return vazio
-    return f"{valor:,.{casas}f}".replace(",", " ").replace(".", ",")
+    return (
+        f"{valor:,.{casas}f}"
+        .replace(",", "\x00")  # separador de milhar, provisório
+        .replace(".", ",")  # decimal
+        .replace("\x00", ".")  # milhar definitivo
+    )
 
 
 # ----------------------------------------------------------------------
@@ -73,9 +78,11 @@ def formatar_programacao(inst: Instancia, prog: Programacao) -> str:
     linhas_texto.append("PROGRAMAÇÃO DA PRODUÇÃO")
     linhas_texto.append(_regua("="))
 
+    mostra_cliente = any(item.cliente for item in inst.itens.values())
+    coluna_cliente = f" {'cliente':<20}" if mostra_cliente else ""
     cabecalho = (
         f"{'#':>2}  {'item':<8} {'setup':>7} {'início':>8} {'fim':>8} "
-        f"{'prazo':>8} {'peso':>5} {'atraso':>8}  situação"
+        f"{'prazo':>8} {'peso':>5} {'atraso':>8}{coluna_cliente}  situação"
     )
 
     for linha in inst.linhas:
@@ -91,11 +98,12 @@ def formatar_programacao(inst: Instancia, prog: Programacao) -> str:
         for ordem, tarefa in enumerate(tarefas, start=1):
             item = inst.itens[tarefa.item]
             situacao = "ATRASO" if tarefa.atraso > 1e-9 else "no prazo"
+            cliente = f" {item.cliente:<20}" if mostra_cliente else ""
             linhas_texto.append(
                 f"{ordem:>2}  {tarefa.item:<8} {_numero(tarefa.setup, 1):>7} "
                 f"{_numero(tarefa.inicio, 1):>8} {_numero(tarefa.fim, 1):>8} "
                 f"{_numero(item.d, 1):>8} {_numero(item.w, 1):>5} "
-                f"{_numero(tarefa.atraso, 1):>8}  {situacao}"
+                f"{_numero(tarefa.atraso, 1):>8}{cliente}  {situacao}"
             )
 
     indicadores = metricas(prog, inst)
@@ -124,6 +132,54 @@ def formatar_programacao(inst: Instancia, prog: Programacao) -> str:
         f"{linha}={_numero(100 * valor, 1)}%" for linha, valor in ocupacao.items()
     )
     linhas_texto.append(f"ocupação por linha .......... {detalhe}")
+    linhas_texto.append(_regua("="))
+
+    if mostra_cliente:
+        linhas_texto.append("")
+        linhas_texto.append(formatar_por_cliente(inst, prog))
+    return "\n".join(linhas_texto)
+
+
+def formatar_por_cliente(inst: Instancia, prog: Programacao) -> str:
+    """Atraso agregado por cliente, do mais penalizado para o menos.
+
+    O objetivo é uma soma sobre itens, mas quem cobra é o cliente. Esta tabela é
+    a tradução: mostra em quem o atraso caiu, quantos pedidos ele tem e quanto
+    do objetivo total veio dele. É também a conferência mais rápida de que a
+    ponderação está funcionando — o cliente de maior peso deve aparecer com
+    pouco ou nenhum atraso.
+    """
+    agregado: dict[str, dict[str, float]] = {}
+    for tarefa in prog.tarefas:
+        item = inst.itens[tarefa.item]
+        registro = agregado.setdefault(
+            item.cliente, {"pedidos": 0.0, "atrasados": 0.0, "atraso": 0.0,
+                           "ponderado": 0.0, "peso": item.w}
+        )
+        registro["pedidos"] += 1
+        registro["atraso"] += tarefa.atraso
+        registro["ponderado"] += item.w * tarefa.atraso
+        if tarefa.atraso > 1e-9:
+            registro["atrasados"] += 1
+
+    linhas_texto = [
+        _regua("="),
+        "ATRASO POR CLIENTE",
+        _regua("-"),
+        f"{'cliente':<22} {'peso':>5} {'pedidos':>8} {'atrasados':>10} "
+        f"{'atraso':>10} {'contribuição':>13}",
+        _regua("-"),
+    ]
+    ordenado = sorted(
+        agregado.items(), key=lambda par: (-par[1]["ponderado"], par[0])
+    )
+    for cliente, dados in ordenado:
+        linhas_texto.append(
+            f"{cliente or '(sem cliente)':<22} {_numero(dados['peso'], 1):>5} "
+            f"{int(dados['pedidos']):>8} {int(dados['atrasados']):>10} "
+            f"{_numero(dados['atraso'], 1):>10} "
+            f"{_numero(dados['ponderado'], 1):>13}"
+        )
     linhas_texto.append(_regua("="))
     return "\n".join(linhas_texto)
 
@@ -157,7 +213,12 @@ def formatar_resultado(res: "Resultado") -> str:
         f"status .............. {res.status}  ({EXPLICACAO_STATUS.get(res.status, '?')})",
         f"objetivo ............ {_numero(res.objetivo)}",
         f"limite inferior ..... {_numero(res.limite_inferior)}",
-        f"gap ................. {_numero(None if res.gap is None else 100 * res.gap)}%",
+        f"gap ................. "
+        + (
+            "indefinido (limite inferior nulo)"
+            if res.gap is None and res.limite_inferior is not None
+            else f"{_numero(None if res.gap is None else 100 * res.gap)}%"
+        ),
         f"tempo ............... {_numero(res.tempo_s)} s",
         f"tamanho do modelo ... {res.n_variaveis} variáveis, "
         f"{res.n_restricoes} restrições",
@@ -172,11 +233,20 @@ def formatar_resultado(res: "Resultado") -> str:
     if res.status == "Not Solved":
         linhas_texto.append("")
         linhas_texto.append(
-            "ATENÇÃO: o valor acima é um limitante superior. O ótimo está entre o"
+            "ATENÇÃO: o valor acima é um limitante superior, não o ótimo."
         )
-        linhas_texto.append(
-            "limite inferior e o objetivo; o gap mede essa distância."
-        )
+        if res.gap is None:
+            linhas_texto.append(
+                "Sem limite inferior útil, não há como afirmar quão longe do"
+            )
+            linhas_texto.append(
+                "ótimo ele está. Aumente --tempo-limite para estreitar a faixa."
+            )
+        else:
+            linhas_texto.append(
+                "O ótimo está entre o limite inferior e o objetivo; o gap mede"
+            )
+            linhas_texto.append("essa distância.")
     linhas_texto.append(_regua("="))
     return "\n".join(linhas_texto)
 

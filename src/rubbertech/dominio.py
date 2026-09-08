@@ -43,6 +43,11 @@ class Item:
         w: peso do atraso, combinando multa contratual e criticidade do cliente.
         cabo_aco: marca itens com cabo de aço. É informativo/documental — a
             restrição de elegibilidade propriamente dita vive nas chaves de ``p``.
+        cliente: quem fez o pedido. Não entra na formulação — o modelo só vê
+            ``w`` —, mas é o que torna o resultado legível para quem vai
+            executá-lo: "o atraso caiu no pedido de fulano" é uma informação
+            acionável, "o atraso caiu no item TX37" não é. Vários pedidos podem
+            ser do mesmo cliente, e nesse caso compartilham a criticidade.
     """
 
     id: str
@@ -50,6 +55,7 @@ class Item:
     d: float
     w: float
     cabo_aco: bool = False
+    cliente: str = ""
 
     @property
     def linhas_elegiveis(self) -> tuple[str, ...]:
@@ -122,6 +128,18 @@ class Instancia:
     def elegiveis(self, i: str) -> tuple[str, ...]:
         """Conjunto ``E_i`` de linhas elegíveis do item ``i``."""
         return self.itens[i].linhas_elegiveis
+
+    @property
+    def clientes(self) -> dict[str, list[str]]:
+        """Mapa ``cliente -> pedidos``, na ordem em que os itens aparecem.
+
+        Serve ao relatório: o atraso ponderado é uma soma sobre itens, mas quem
+        recebe o telefonema é o cliente.
+        """
+        agrupados: dict[str, list[str]] = {}
+        for item in self.itens.values():
+            agrupados.setdefault(item.cliente, []).append(item.id)
+        return agrupados
 
     def p(self, i: str, k: str) -> float:
         """``p[i,k]``."""

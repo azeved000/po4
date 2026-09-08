@@ -1,3 +1,3 @@
-n,status_pli,objetivo_pli,tempo_pli_s,objetivo_EDD,objetivo_SPT,objetivo_WSPT,melhor_regra,ganho_percentual_pli,n_atrasados_pli,makespan_pli
-6,Optimal,780.0999999999999,1.604,791.5,1410.4,791.8000000000001,EDD,1.44,5,115.6
-10,Not Solved,1540.0000000000002,9.949,559.9000000000001,1005.7,973.2999999999998,EDD,-175.05,7,247.0
+n,semente,status_pli,otimo_provado,natureza_comparacao,objetivo_pli,limite_inferior_pli,gap_percentual,tempo_pli_s,objetivo_EDD,objetivo_SPT,objetivo_WSPT,melhor_regra,objetivo_melhor_regra,ganho_percentual_pli,pli_pior_que_regra,n_atrasados_pli,makespan_pli
+6,6,Optimal,True,ótimo provado,743.3,743.3,0.0,2.037,751.3000000000001,857.1,792.0,EDD,751.3000000000001,1.06,False,5,87.0
+10,6,Not Solved,False,incumbente no limite de tempo,567.6,72.6,682.0,4.949,638.5000000000002,922.8,811.7999999999998,EDD,638.5000000000002,11.1,False,6,107.9

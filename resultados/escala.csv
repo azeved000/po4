@@ -1,8 +1,8 @@
-n,n_variaveis,n_restricoes,status,objetivo,limite_inferior,gap,tempo_s
-6,126,208,Optimal,780.0999999999999,780.0999999999999,0.0,1.609
-10,366,652,Not Solved,932.1999999999998,249.999,2.73,120.069
-15,696,1273,Not Solved,1166.8,0.0,1.0,119.876
-20,1220,2279,Not Solved,4537.4,0.0,1.0,119.351
-30,2568,4894,Not Solved,11032.599999999999,0.0,1.0,117.993
-50,7196,13982,Not Solved,26502.899999999994,0.0,1.0,115.591
-80,17780,34904,Not Solved,118298.50000000003,0.0,1.0,87.87
+n,semente,n_variaveis,n_restricoes,status,objetivo,limite_inferior,gap_percentual,tempo_s,mensagem_solver
+6,6,126,208,Optimal,743.3,743.3,0.0,2.009,Optimal solution found
+10,6,366,652,Not Solved,558.0999999999999,119.6,367.0,120.023,Stopped on time limit
+15,6,696,1273,Not Solved,2176.1,0.0,,119.824,Stopped on time limit
+20,6,1220,2279,Not Solved,5242.500000000001,0.0,,119.342,Stopped on time limit
+30,6,2568,4894,Not Solved,15739.799999999997,0.0,,117.997,Stopped on time limit
+50,6,7196,13982,Not Solved,33943.80000000001,0.0,,115.408,Stopped on time limit
+80,6,17780,34904,Not Solved,114053.6,0.0,,87.361,Stopped on time limit

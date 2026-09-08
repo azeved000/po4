@@ -46,6 +46,7 @@ def para_dicionario(inst: Instancia, nome: str | None = None) -> dict[str, Any]:
                 "d": item.d,
                 "w": item.w,
                 "cabo_aco": item.cabo_aco,
+                "cliente": item.cliente,
             }
             for item in inst.itens.values()
         ],
@@ -84,6 +85,7 @@ def de_dicionario(dados: dict[str, Any]) -> Instancia:
             d=float(bruto["d"]),
             w=float(bruto["w"]),
             cabo_aco=bool(bruto.get("cabo_aco", False)),
+            cliente=str(bruto.get("cliente", "")),
         )
 
     setup: dict[tuple[str, str], float] = {}

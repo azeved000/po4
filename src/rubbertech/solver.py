@@ -185,7 +185,15 @@ def resolver(
         gap: float | None = 0.0
     else:
         limite_inferior = limite_log
-        if gap_log is not None:
+        if limite_inferior is not None and limite_inferior <= 0 < (
+            objetivo_solver or 0
+        ):
+            # Limite inferior zero (ou negativo) com incumbente positivo: o gap
+            # relativo é indefinido, não 100%. O CBC imprime "Gap: 1.00" nesse
+            # caso, que é um valor de saturação e não uma medida — repassá-lo
+            # faria o relatório afirmar uma proximidade do ótimo que não existe.
+            gap = None
+        elif gap_log is not None:
             gap = gap_log
         elif limite_inferior not in (None, 0) and objetivo_solver is not None:
             # Mesma convenção do CBC: gap relativo ao **limite inferior**, e não

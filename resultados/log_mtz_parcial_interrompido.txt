@@ -1,0 +1,17 @@
+
+=== MTZ LIGADO x DESLIGADO (limite de 120 s, sementes [6, 7, 8]) ===
+   n  seed MTZ      vars    restr status           objetivo     lim.inf.     gap %   tempo s
+   6     6 sim       126      208 Optimal            743.30       743.30      0.00      2.02
+   6     6 não       120      142 Optimal            743.30       743.30      0.00     28.37
+   6     7 sim       126      208 Optimal            511.90       511.90      0.00      2.10
+   6     7 não       120      142 Optimal            511.90       511.90      0.00      8.02
+   6     8 sim       126      208 Optimal            834.00       834.00      0.00      1.61
+   6     8 não       120      142 Optimal            834.00       834.00      0.00      0.89
+   8     6 sim       230      398 Optimal            721.70       721.70      0.00    103.30
+   8     6 não       222      252 Optimal            721.70       721.70      0.00     63.91
+   8     7 sim       230      398 Optimal            394.00       394.00      0.00     32.62
+   8     7 não       222      252 Optimal            394.00       394.00      0.00     19.94
+   8     8 sim       230      398 Optimal            395.30       395.30      0.00     38.01
+   8     8 não       222      252 Optimal            395.30       395.30      0.00     20.17
+  10     6 sim       366      652 Not Solved         558.10       119.60    367.00    120.02
+  10     6 não       356      394 Not Solved         499.80       127.52    292.00    120.08

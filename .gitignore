@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Saídas geradas pelas execuções (mantenha só o que for para o relatório)
+resultados/*.png
+resultados/*.txt
+resultados/*.csv
+
+# macOS
+.DS_Store

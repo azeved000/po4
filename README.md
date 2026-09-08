@@ -3,11 +3,14 @@
 ## 1. O que é
 
 Programação da produção de uma fábrica de correias transportadoras com **4
-linhas paralelas não idênticas**. Cada item tem prazo, cliente e tempo de
+linhas paralelas não idênticas**. Cada pedido tem prazo, cliente e tempo de
 processamento que depende da linha; itens com cabo de aço só rodam na linha
 dedicada; e o tempo de preparação entre dois itens depende da ordem em que eles
 são produzidos. O objetivo é minimizar o **atraso total ponderado**, `Σ w_i·T_i`,
-em que o peso combina multa contratual e criticidade do cliente.
+em que o peso combina multa contratual e criticidade do cliente — e como a
+criticidade é uma propriedade do cliente, vários pedidos de um mesmo cliente
+compartilham o peso, o que faz proteger um cliente ser uma decisão que arrasta
+várias alocações de uma vez.
 
 A solução é obtida por **Programação Linear Inteira Mista (PLI)** — programação
 matemática exata, não heurística. As regras de despacho de `baselines.py` (EDD,
@@ -108,6 +111,49 @@ aparecem assim no arquivo `.lp` exportado.
 | Restrição (5') antecipação | `modelo.py`, restrição `antecipacao_{i}` |
 | Restrição (6) MTZ | `modelo.py`, restrição `mtz_{i}_{j}_{k}` |
 
+### Conferindo a formulação no próprio modelo gerado
+
+O modelo pode ser exportado em formato `.lp` sem resolver nada, para conferência
+restrição a restrição:
+
+```bash
+python scripts/resolver.py --instancia data/instancias/exemplo_minimo.json --exportar-lp resultados/exemplo_minimo.lp
+```
+
+```
+Modelo exportado para: resultados\exemplo_minimo.lp
+30 variáveis, 42 restrições. O solver não foi executado.
+```
+
+Trecho do arquivo gerado (instância de 3 itens e 2 linhas da seção 5):
+
+```
+Minimize
+atraso_ponderado_total: 8 T_CA1 + 5 T_TX1 + 2 T_TX2
+Subject To
+alocacao_CA1: x_CA1_L2 = 1
+alocacao_TX1: x_TX1_L1 + x_TX1_L2 = 1
+entrada_TX1_L1: - x_TX1_L1 + y_INI_TX1_L1 + y_TX2_TX1_L1 = 0
+entrada_TX1_L2: - x_TX1_L2 + y_CA1_TX1_L2 + y_INI_TX1_L2 + y_TX2_TX1_L2 = 0
+saida_TX1_L1: - x_TX1_L1 + y_TX1_TX2_L1 <= 0
+origem_L2: y_INI_CA1_L2 + y_INI_TX1_L2 + y_INI_TX2_L2 <= 1
+tempo_TX1_CA1_L2: C_CA1 - C_TX1 - 154 y_TX1_CA1_L2 >= -104
+atraso_CA1: - C_CA1 + T_CA1 >= -40
+antecipacao_CA1: A_CA1 + C_CA1 >= 40
+mtz_TX1_CA1_L2: - u_CA1 + u_TX1 + 3 y_TX1_CA1_L2 <= 2
+Bounds
+ 1 <= u_CA1 <= 3
+```
+
+Duas leituras que valem a conferência:
+
+- `tempo_TX1_CA1_L2` é a restrição (4') com `s[TX1,CA1] = 20`, `p[CA1,L2] = 30`
+  e `V = 154`: `C_CA1 ≥ C_TX1 + 20 + 30 − 154·(1 − y)`, que rearranjada dá
+  exatamente `C_CA1 − C_TX1 − 154·y ≥ −104`.
+- `alocacao_CA1: x_CA1_L2 = 1` tem um único termo, e `entrada_TX1_L1` não
+  contém `y_CA1_TX1_L1`: a elegibilidade não aparece como restrição adicional
+  porque as variáveis correspondentes nem existem.
+
 ### Três notas de modelagem
 
 **Big-M calculado, não arbitrado.** O valor usado é
@@ -139,15 +185,23 @@ um ciclo `i → j → … → i` exigiria `C[i] ≥ C[i] + (setups e processamen
 positivos)`, ou seja, `C[i] > C[i]`. As restrições (6) de Miller, Tucker e
 Zemlin (1960) são portanto **redundantes** e entram só para fortalecer a
 relaxação linear. Ligam e desligam pela flag `modelo.ConfigModelo.usar_mtz`
-(padrão `True`) ou pelo argumento `--sem-mtz` na linha de comando. O efeito
-medido está na seção 8.
+(padrão `True`) ou pelo argumento `--sem-mtz` na linha de comando:
+
+```bash
+python scripts/resolver.py --instancia data/instancias/exemplo_minimo.json --sem-mtz
+```
+
+No exemplo mínimo, desligar o MTZ leva o modelo de 30 variáveis e 42 restrições
+para 27 e 34, com o mesmo ótimo (62,00) — como tem de ser, já que restrições
+redundantes não podem mudar o valor ótimo. O que muda é o esforço para
+encontrá-lo; o efeito medido está na seção 8.
 
 ---
 
 ## 3. Arquitetura
 
 ```
-rubbertech/
+.                                # raiz do repositório
 ├── README.md
 ├── requirements.txt
 ├── pyproject.toml               # metadados e configuração do pytest
@@ -202,6 +256,10 @@ pip install -r requirements.txt
 O solver CBC vem junto com o PuLP; não há nada mais para instalar. Não é preciso
 instalar o pacote — os scripts acrescentam `src/` ao caminho de busca sozinhos.
 
+As saídas abaixo são reais, copiadas de uma execução em Windows 10 com Python
+3.14 e PuLP 3.3.2 (CBC). Os tempos dependem da máquina; os valores de objetivo,
+não.
+
 ### Exemplo 1 — resolver a instância de referência
 
 ```bash
@@ -225,7 +283,7 @@ status .............. Optimal  (ótimo provado (o solver fechou o gap))
 objetivo ............ 144,00
 limite inferior ..... 144,00
 gap ................. 0,00%
-tempo ............... 13,47 s
+tempo ............... 13,20 s
 tamanho do modelo ... 230 variáveis, 398 restrições
 mensagem do solver .. Optimal solution found
 conferência ......... objetivo recalculado de forma independente difere em 0,000000
@@ -237,31 +295,31 @@ PROGRAMAÇÃO DA PRODUÇÃO
 
 Linha L1: TX4 -> TX8
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  TX4          8,0      8,0     24,0     30,0   3,0      0,0  no prazo
- 2  TX8          5,0     29,0     55,0     42,0   4,0     13,0  ATRASO
+ 1  TX4          8,0      8,0     24,0     30,0   3,0      0,0 Eduarda Nogueira      no prazo
+ 2  TX8          5,0     29,0     55,0     42,0   4,0     13,0 Diego Vasconcelos     ATRASO
 
 Linha L2: TX6 -> TX7
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  TX6          8,0      8,0     29,0     35,0   6,0      0,0  no prazo
- 2  TX7          5,0     34,0     59,0     55,0   2,0      4,0  ATRASO
+ 1  TX6          8,0      8,0     29,0     35,0   6,0      0,0 Mariana Yamamoto      no prazo
+ 2  TX7          5,0     34,0     59,0     55,0   2,0      4,0 Fábio Assunção        ATRASO
 
 Linha L3: TX3 -> TX5
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  TX3          8,0      8,0     33,0     40,0   5,0      0,0  no prazo
- 2  TX5          5,0     38,0     68,0     50,0   1,0     18,0  ATRASO
+ 1  TX3          8,0      8,0     33,0     40,0   5,0      0,0 Camila Fontes         no prazo
+ 2  TX5          5,0     38,0     68,0     50,0   1,0     18,0 Gabriela Munhoz       ATRASO
 
 Linha L4: CA1 -> CA2
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  CA1         12,0     12,0     51,0     45,0   8,0      6,0  ATRASO
- 2  CA2          5,0     56,0    104,0     95,0   2,0      9,0  ATRASO
+ 1  CA1         12,0     12,0     51,0     45,0   8,0      6,0 Adriana Prado         ATRASO
+ 2  CA2          5,0     56,0    104,0     95,0   2,0      9,0 Fábio Assunção        ATRASO
 
 ====================================================================================
 INDICADORES
@@ -272,6 +330,20 @@ itens atrasados ............. 5 de 8
 makespan .................... 104,00
 tempo total de setup ........ 56,00
 ocupação por linha .......... L1=52,9%  L2=56,7%  L3=65,4%  L4=100,0%
+====================================================================================
+
+====================================================================================
+ATRASO POR CLIENTE
+------------------------------------------------------------------------------------
+cliente                 peso  pedidos  atrasados     atraso  contribuição
+------------------------------------------------------------------------------------
+Diego Vasconcelos        4,0        1          1       13,0          52,0
+Adriana Prado            8,0        1          1        6,0          48,0
+Fábio Assunção           2,0        2          2       13,0          26,0
+Gabriela Munhoz          1,0        1          1       18,0          18,0
+Camila Fontes            5,0        1          0        0,0           0,0
+Eduarda Nogueira         3,0        1          0        0,0           0,0
+Mariana Yamamoto         6,0        1          0        0,0           0,0
 ====================================================================================
 
 VERIFICAÇÃO INDEPENDENTE: nenhuma violação encontrada.
@@ -327,10 +399,10 @@ VALIDAÇÃO INCREMENTAL (n = 5, MTZ = sim)
 ========================================================================================
 estágio    o que valida                          PLI  força bruta  tempo s  resultado
 ----------------------------------------------------------------------------------------
-estágio 1  uma linha, setup zero               85.00        85.00     0.31  PASSOU
-estágio 2  uma linha, setup assimétrico       179.40       179.40     0.28  PASSOU
-estágio 3  armadilha de subciclo              850.80       850.80     0.56  PASSOU
-estágio 4  elegibilidade restrita             401.80       401.80     1.44  PASSOU
+estágio 1  uma linha, setup zero              828.80       828.80     0.44  PASSOU
+estágio 2  uma linha, setup assimétrico       445.80       445.80     0.25  PASSOU
+estágio 3  armadilha de subciclo             1488.80      1488.80     0.23  PASSOU
+estágio 4  elegibilidade restrita             896.20       896.20     1.87  PASSOU
 ----------------------------------------------------------------------------------------
 Todos os estágios passaram: o modelo reproduz o ótimo exato.
 ========================================================================================
@@ -354,9 +426,9 @@ que só roda em `L2`. Está em `data/instancias/exemplo_minimo.json`:
   "no_inicial": "INI",
   "linhas": ["L1", "L2"],
   "itens": [
-    { "id": "TX1", "p": { "L1": 20, "L2": 24 }, "d": 30, "w": 5, "cabo_aco": false },
-    { "id": "TX2", "p": { "L1": 15, "L2": 18 }, "d": 25, "w": 2, "cabo_aco": false },
-    { "id": "CA1", "p": { "L2": 30 }, "d": 40, "w": 8, "cabo_aco": true }
+    { "id": "TX1", "p": { "L1": 20, "L2": 24 }, "d": 30, "w": 5, "cabo_aco": false, "cliente": "Camila Fontes" },
+    { "id": "TX2", "p": { "L1": 15, "L2": 18 }, "d": 25, "w": 2, "cabo_aco": false, "cliente": "Fábio Assunção" },
+    { "id": "CA1", "p": { "L2": 30 }, "d": 40, "w": 8, "cabo_aco": true, "cliente": "Adriana Prado" }
   ],
   "setup": {
     "INI": { "TX1": 8, "TX2": 8, "CA1": 12 },
@@ -380,6 +452,7 @@ que só roda em `L2`. Está em `data/instancias/exemplo_minimo.json`:
 | `itens[].d` | número ≥ 0 | **sim** | prazo de entrega, contado a partir de zero | tempo |
 | `itens[].w` | número ≥ 0 | **sim** | peso do atraso (multa × criticidade do cliente) | adimensional |
 | `itens[].cabo_aco` | booleano | não (padrão `false`) | marca a família do item; usado no relatório e no Gantt | — |
+| `itens[].cliente` | texto | não (padrão vazio) | quem fez o pedido; agrupa o relatório de atraso por cliente | — |
 | `setup` | objeto `anterior → { seguinte: número }` | **sim** | tempo de preparação entre dois itens consecutivos | tempo |
 
 #### Cinco pontos que costumam gerar dúvida
@@ -400,6 +473,12 @@ que só roda em `L2`. Está em `data/instancias/exemplo_minimo.json`:
 5. **Unidades.** O tempo é livre (minutos, horas, turnos), desde que o mesmo em
    `p`, `setup` e `d`. O peso `w` é adimensional e só a **proporção** entre os
    pesos importa: dobrar todos os pesos não muda a programação ótima.
+6. **`cliente` é opcional e não entra na formulação.** O modelo só enxerga `w`.
+   O campo serve para o relatório agrupar o atraso por cliente — que é a leitura
+   acionável, já que quem cobra é o cliente, não o item. Vários pedidos podem
+   ter o mesmo cliente; nesse caso o natural é que compartilhem o mesmo `w`,
+   porque a criticidade é uma característica do cliente e não do pedido
+   individual. O arquivo sem o campo continua válido.
 
 #### Rodando o exemplo
 
@@ -499,7 +578,9 @@ Os parâmetros que valem a pena mexer estão em constantes nomeadas no topo de
 | fração com cabo de aço | argumento `frac_cabo` / `FRACAO_CABO_ACO_PADRAO` | 0,25 | pressão sobre a linha dedicada |
 | folga média dos prazos | `FOLGA_PRAZO_MEDIA` | 0,45 | prazo médio como fração do horizonte; menor = carteira mais atrasada |
 | amplitude dos prazos | `FOLGA_PRAZO_DISPERSAO` | 0,70 | dispersão dos prazos em torno da média |
-| distribuição dos pesos | `PESOS_POSSIVEIS`, `PESOS_PROBABILIDADES` | 1 a 8 | desigualdade entre clientes |
+| carteira de clientes | `CLIENTES_PADRAO` / argumento `clientes` | 16 clientes, criticidade 1 a 8 | quem faz os pedidos e quanto vale cada um |
+| pedidos por cliente | `PEDIDOS_POR_CLIENTE` / argumento `pedidos_por_cliente` | 2,5 | quanto os pesos se concentram em poucos clientes |
+| distribuição dos pesos | argumento `pesos` / `PESOS_POSSIVEIS`, `PESOS_PROBABILIDADES` | vem do cliente | passar `pesos=[...]` desliga o vínculo com o cliente e sorteia por pedido |
 | velocidade das linhas | `FATOR_VELOCIDADE` | 1,00 a 1,40 | o quanto as máquinas são não idênticas |
 | setups por família | `SETUP_INTRAFAMILIA`, `SETUP_TEXTIL_PARA_CABO`, `SETUP_CABO_PARA_TEXTIL`, `SETUP_INICIAL_*` | 5 / 20 / 11 / 8 e 12 | custo e assimetria da troca |
 | reprodutibilidade | argumento `seed` | varia por estágio | mesma `seed` ⇒ instância idêntica |
@@ -508,10 +589,23 @@ Como os geradores são funções Python comuns, dá para montar uma instância n
 em três linhas e salvá-la em JSON:
 
 ```python
+import sys
+sys.path.insert(0, "src")   # o pacote não precisa estar instalado
+
 from rubbertech.instancias import estagio_6_completo
 from rubbertech.io_dados import salvar
 
 salvar(estagio_6_completo(seed=42, n=60), "data/instancias/carteira60.json")
+```
+
+Rodando a partir da raiz do projeto, isso grava o arquivo:
+
+```bash
+python -c "import sys; sys.path.insert(0,'src'); from rubbertech.instancias import estagio_6_completo; from rubbertech.io_dados import salvar; print(salvar(estagio_6_completo(seed=42, n=60), 'data/instancias/carteira60.json'))"
+```
+
+```
+data\instancias\carteira60.json
 ```
 
 ### Erros comuns na entrada
@@ -577,20 +671,54 @@ conferência ......... objetivo recalculado de forma independente difere em 0,00
 **`status = Not Solved` com objetivo preenchido não é solução ótima.** É uma
 solução viável encontrada dentro do limite de tempo — um limitante superior. O
 ótimo está entre o limite inferior e o objetivo, e o `gap` diz o tamanho dessa
-faixa. Nesse caso o relatório imprime, logo abaixo:
+faixa. O relatório avisa explicitamente. Exemplo real:
+
+```bash
+python scripts/resolver.py --instancia estagio_5 --tempo-limite 15
+```
 
 ```
-ATENÇÃO: o valor acima é um limitante superior. O ótimo está entre o
-limite inferior e o objetivo; o gap mede essa distância.
+status .............. Not Solved  (solução VIÁVEL no limite de tempo — NÃO é o ótimo provado)
+objetivo ............ 7.599,60
+limite inferior ..... 0,00
+gap ................. indefinido (limite inferior nulo)
+tempo ............... 14,30 s
+tamanho do modelo ... 1220 variáveis, 2279 restrições
+mensagem do solver .. Stopped on time limit
+conferência ......... objetivo recalculado de forma independente difere em 0,000000
+
+ATENÇÃO: o valor acima é um limitante superior, não o ótimo.
+Sem limite inferior útil, não há como afirmar quão longe do
+ótimo ele está. Aumente --tempo-limite para estreitar a faixa.
 ```
+
+`gap = indefinido (limite inferior nulo)` significa que o *branch-and-bound* não
+provou nenhum limite inferior melhor que zero no tempo disponível — a relaxação
+linear de um modelo com big-M admite `y` fracionário, o que zera as conclusões
+e, com elas, o atraso. Não há como afirmar quão perto do ótimo a solução está. O
+CBC imprime `Gap: 1.00` nesse caso, que é um valor de saturação e não uma
+medida; repassá-lo como "100%" afirmaria uma proximidade do ótimo que não foi
+demonstrada.
 
 Para aumentar o tempo disponível, use `--tempo-limite` (em segundos).
+
+**Unidade do gap nos CSVs.** Na tela o gap aparece em porcentagem, e os CSVs de
+`resultados/` seguem a mesma unidade: a coluna se chama **`gap_percentual`** e
+guarda o valor **já em porcentagem** — `0` é otimalidade provada, `35.0` quer
+dizer 35 %, `153.0` quer dizer 153 %. A convenção vale para `escala.csv`,
+`mtz.csv` e `baselines.csv`. **Célula vazia é gap indefinido, não gap zero:**
+significa limite inferior nulo, o caso descrito acima em que nada foi provado.
+A fórmula é a mesma da tela e a do CBC, relativa ao limite inferior:
+
+```
+gap_percentual = 100 · (objetivo − limite inferior) / limite inferior
+```
 
 Na tabela de programação, cada linha de item se lê assim:
 
 ```
- #  item       setup   início      fim    prazo  peso   atraso  situação
- 2  TX8          5,0     29,0     55,0     42,0   4,0     13,0  ATRASO
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
+ 2  TX2          5,0     33,0     48,0     25,0   2,0     23,0 Fábio Assunção        ATRASO
 ```
 
 - `#` — posição do item na sequência da linha;
@@ -600,16 +728,32 @@ Na tabela de programação, cada linha de item se lê assim:
   o setup ocupa a linha de `início − setup` até `início`;
 - `prazo` — `d_i`; `peso` — `w_i`;
 - `atraso` — `T_i = max(0, fim − prazo)`;
+- `cliente` — quem fez o pedido (coluna omitida se a instância não informa);
 - `situação` — `ATRASO` quando `T_i > 0`, `no prazo` caso contrário.
 
-No exemplo: `TX8` é o segundo item de `L1`, paga 5 de setup (das 24,0 às 29,0),
-processa das 29,0 às 55,0, tinha prazo 42,0 e atrasa 13,0, com peso 4 —
-contribuindo com 52,0 para o objetivo.
+No exemplo: `TX2` é o segundo item de `L1`, paga 5 de setup (das 28,0 às 33,0),
+processa das 33,0 às 48,0, tinha prazo 25,0 e atrasa 23,0, com peso 2 —
+contribuindo com 46,0 para o objetivo, no pedido de Fábio Assunção.
 
 O bloco `INDICADORES` traz o atraso ponderado (o objetivo), o atraso total sem
 pesos, quantos itens atrasaram, o makespan, o tempo total gasto em preparação e
 a ocupação de cada linha (fração do makespan em que a linha esteve processando
 ou em setup).
+
+Se a instância informa clientes, vem por último o bloco `ATRASO POR CLIENTE`:
+
+```
+cliente                 peso  pedidos  atrasados     atraso  contribuição
+------------------------------------------------------------------------------------
+Fábio Assunção           2,0        1          1       23,0          46,0
+Adriana Prado            8,0        1          1        2,0          16,0
+Camila Fontes            5,0        1          0        0,0           0,0
+```
+
+`atraso` é a soma sem pesos dos pedidos daquele cliente; `contribuição` é quanto
+ele responde do objetivo (`Σ w_i·T_i` restrita aos seus pedidos), e a tabela vem
+ordenada por ela. É a leitura que interessa a quem vai atender o telefone: o
+objetivo é uma soma sobre itens, mas quem reclama é o cliente.
 
 A última linha é o resultado do verificador independente. Qualquer coisa
 diferente de `nenhuma violação encontrada` indica defeito no modelo ou na
@@ -636,16 +780,21 @@ A correção não é assumida; é verificada em três camadas independentes.
 
 8 itens e 4 linhas. `CA1` e `CA2` têm cabo de aço e só rodam em `L4`.
 
-| item | L1 | L2 | L3 | L4 | `d` | `w` |
-|---|---|---|---|---|---|---|
-| CA1 | — | — | — | 39 | 45 | 8 |
-| CA2 | — | — | — | 48 | 95 | 2 |
-| TX3 | 20 | 23 | 25 | 28 | 40 | 5 |
-| TX4 | 16 | 18 | 20 | 22 | 30 | 3 |
-| TX5 | 24 | 28 | 30 | 34 | 50 | 1 |
-| TX6 | 18 | 21 | 22 | 25 | 35 | 6 |
-| TX7 | 22 | 25 | 27 | 31 | 55 | 2 |
-| TX8 | 26 | 30 | 32 | 36 | 42 | 4 |
+| item | L1 | L2 | L3 | L4 | `d` | `w` | cliente |
+|---|---|---|---|---|---|---|---|
+| CA1 | — | — | — | 39 | 45 | 8 | Adriana Prado |
+| CA2 | — | — | — | 48 | 95 | 2 | Fábio Assunção |
+| TX3 | 20 | 23 | 25 | 28 | 40 | 5 | Camila Fontes |
+| TX4 | 16 | 18 | 20 | 22 | 30 | 3 | Eduarda Nogueira |
+| TX5 | 24 | 28 | 30 | 34 | 50 | 1 | Gabriela Munhoz |
+| TX6 | 18 | 21 | 22 | 25 | 35 | 6 | Mariana Yamamoto |
+| TX7 | 22 | 25 | 27 | 31 | 55 | 2 | Fábio Assunção |
+| TX8 | 26 | 30 | 32 | 36 | 42 | 4 | Diego Vasconcelos |
+
+Os clientes são rótulos acrescentados aos dados do enunciado; `d` e `w` são os
+originais, e o ótimo continua exatamente 144,0. Fábio Assunção é o único com
+dois pedidos (CA2 e TX7), ambos de peso 2 — coerente com a regra de que a
+criticidade é do cliente, não do pedido.
 
 Setups: inicial 12 para itens CA e 8 para TX; 5 dentro da mesma família; 20 de
 TX para CA (montar o dispositivo de tração dos cabos) e 11 de CA para TX
@@ -666,6 +815,27 @@ programação que espalhasse o atraso igualmente entre os itens estaria
 minimizando o atraso *total*, não o atraso *ponderado* — é o teste que separa
 uma função objetivo correta de uma plausível.
 
+Lido por cliente, é a mesma decisão em outra linguagem — e é assim que o
+relatório a apresenta:
+
+```
+cliente                 peso  pedidos  atrasados     atraso  contribuição
+------------------------------------------------------------------------------------
+Adriana Prado            8,0        1          1        6,0          48,0
+Camila Fontes            5,0        1          1        9,0          45,0
+Fábio Assunção           2,0        2          2       13,0          26,0
+Gabriela Munhoz          1,0        1          1       25,0          25,0
+Diego Vasconcelos        4,0        1          0        0,0           0,0
+Eduarda Nogueira         3,0        1          0        0,0           0,0
+Mariana Yamamoto         6,0        1          0        0,0           0,0
+```
+
+Gabriela Munhoz (peso 1) absorve 25 das 53 u.t. de atraso total e contribui com
+apenas 25 das 144 do objetivo; Mariana Yamamoto (peso 6) e Eduarda Nogueira
+(peso 3) saem ilesas. Adriana Prado aparece no topo apesar de atrasar só 6 u.t.,
+porque seu peso 8 multiplica o pouco atraso que sobrou — e ela é cliente do
+único item de cabo de aço com prazo apertado, preso à linha L4.
+
 ### Rodando os testes
 
 ```bash
@@ -675,6 +845,13 @@ python -m pytest tests -q
 ```
 ........................................................................ [100%]
 72 passed in 18.38s
+```
+
+O único teste demorado (a resolução da instância de referência até otimalidade
+provada, ~13 s) está marcado como `lento`; para pular:
+
+```bash
+python -m pytest tests -q -m "not lento"
 ```
 
 Cobertura, por arquivo:
@@ -688,6 +865,8 @@ Cobertura, por arquivo:
 | `test_io_dados.py` | ida e volta pelo JSON preserva a instância e o ótimo; erros de formato têm mensagem específica |
 | `test_regressao.py` | a instância de referência vale exatamente 144,0 pela força bruta, pelo avaliador e pelo modelo; o modelo bate com a força bruta em quatro instâncias pequenas com seeds fixas |
 | `test_mtz.py` | o ótimo é o mesmo com e sem MTZ (o MTZ não pode cortar solução ótima) e a relaxação linear com MTZ não é pior |
+| `test_relatorio.py` | uma solução apenas viável nunca é apresentada como ótima; gap indefinido é declarado como tal; a saída não usa caracteres que o console Windows não codifica |
+| `test_clientes.py` | todo pedido tem cliente; pedidos do mesmo cliente têm o mesmo peso; o cliente sobrevive ao JSON e arquivos sem o campo continuam válidos; a referência segue valendo 144,0 |
 
 ---
 
@@ -699,15 +878,115 @@ Medido:
 | instância | itens | `x` | `y` | variáveis | restrições (com MTZ) |
 |---|---|---|---|---|---|
 | referência | 8 | 26 | 172 | 230 | 398 |
-| completa | 80 | 260 | 17.200 | PLACEHOLDER_VARS_80 | PLACEHOLDER_RESTR_80 |
+| completa | 80 | 260 | 17.200 | 17.780 | 34.904 |
 
-PLACEHOLDER_ESCALA
+**O que aconteceu de fato.** Medido com
+
+```bash
+python scripts/experimentos.py --experimento escala --tempo-limite 120
+```
+
+em Windows 10, Python 3.14, PuLP 3.3.2 com CBC, limite de 120 s por instância
+(CSV completo em `resultados/escala.csv`):
+
+| n | variáveis | restrições | status | objetivo | limite inferior | gap | tempo (s) |
+|---|---|---|---|---|---|---|---|
+| 6 | 126 | 208 | **Optimal** | 743,30 | 743,30 | 0 % | 2,0 |
+| 10 | 366 | 652 | Not Solved | 558,10 | 119,60 | 367 % | 120,0 |
+| 15 | 696 | 1.273 | Not Solved | 2.176,10 | 0,00 | indefinido | 119,8 |
+| 20 | 1.220 | 2.279 | Not Solved | 5.242,50 | 0,00 | indefinido | 119,3 |
+| 30 | 2.568 | 4.894 | Not Solved | 15.739,80 | 0,00 | indefinido | 118,0 |
+| 50 | 7.196 | 13.982 | Not Solved | 33.943,80 | 0,00 | indefinido | 115,4 |
+| **80** | **17.780** | **34.904** | **Not Solved** | **114.053,60** | **0,00** | **indefinido** | **87,4** |
+
+A leitura honesta desta tabela:
+
+- **Otimalidade provada só na instância de 6 itens.** É a única linha com
+  `Optimal`, e a única em que o número da coluna "objetivo" é o ótimo. De n = 10
+  em diante o CBC devolve uma solução viável e para no limite de tempo.
+- **A coluna "objetivo" das linhas `Not Solved` é um limitante superior**, não o
+  ótimo: é a melhor solução que a busca tinha na mão quando o relógio acabou. O
+  ótimo verdadeiro está em algum ponto entre o limite inferior e esse valor.
+- **A partir de n = 15 o limite inferior fica em zero e o gap satura**, ou seja,
+  o *branch-and-bound* não provou nada além do trivial — nenhuma informação
+  melhor que "o atraso ponderado não é negativo". A causa é estrutural: a
+  relaxação linear de um modelo com big-M permite `y` fracionário, o que
+  desativa as restrições (4) e (4'), zera as conclusões e, com elas, o atraso.
+- **Gap saturado significa ausência de informação, não solução ruim.** Com
+  limite inferior nulo o gap relativo é indefinido (o CBC imprime `Gap: 1.00`,
+  isto é, 100 %, que é um valor de saturação e não uma medida). Isso não diz que
+  a solução de 80 itens seja má — diz que **não há como afirmar quão longe do
+  ótimo ela está**. O valor 114.053,60 é um limitante superior verificado e nada
+  mais. As duas afirmações são diferentes, e o relatório não troca uma pela
+  outra.
+- Na instância de 80 itens o CBC encerrou com a mensagem `Stopped on time limit`
+  aos 87 s de tempo de parede (o tempo inclui a construção do modelo, não só a
+  busca).
+- O tempo é o limite imposto, não o tempo necessário: as linhas de 10 a 50 itens
+  gastaram exatamente o orçamento dado.
+- Os objetivos **não são comparáveis entre linhas da tabela**: cada `n` é uma
+  carteira diferente, com mais pedidos e portanto mais atraso a acumular. A
+  tabela mede tempo e gap, não qualidade relativa.
+
+**Efeito do MTZ.** As restrições redundantes (6) não mudam o ótimo — não podem —
+mas mudam o esforço para encontrá-lo. Medido com
+
+```bash
+python scripts/experimentos.py --experimento mtz --tamanhos 6 10 15 --tempo-limite 60
+```
+
+| instância | MTZ | restrições | status | objetivo | limite inferior | tempo (s) |
+|---|---|---|---|---|---|---|
+| **referência (8)** | **sim** | **398** | **Optimal** | **144,00** | **144,00** | **13,2** |
+| **referência (8)** | **não** | **252** | **Not Solved** | **144,00** | **48,00** | **120,9** |
+| gerada n = 6 | sim | 208 | Optimal | 1.110,20 | 1.110,20 | 1,3 |
+| gerada n = 6 | não | 142 | Optimal | 1.110,20 | 1.110,20 | 0,9 |
+| gerada n = 10 | sim | 652 | Not Solved | 717,70 | 323,20 | 60,0 |
+| gerada n = 10 | não | 394 | Not Solved | 461,10 | 323,20 | 60,0 |
+| gerada n = 15 | sim | 1.273 | Not Solved | 2.694,40 | 0,00 | 59,8 |
+| gerada n = 15 | não | 733 | Not Solved | 4.880,30 | 0,00 | 61,2 |
+
+O que os dados sustentam, e só isso:
+
+1. **Na instância de referência o MTZ é decisivo.** Com ele o CBC prova
+   otimalidade em 13,2 s; sem ele, aos 120,9 s a busca *encontrou* o ótimo
+   (144,00) mas não o provou — o limite inferior parou em 48,00. É o efeito
+   esperado: as restrições redundantes não mudam o conjunto de soluções
+   inteiras, mas cortam a relaxação e dão ao *branch-and-bound* uma régua melhor
+   para podar.
+2. **Nas instâncias geradas o efeito não se repete.** Em n = 6 os dois modelos
+   provam o mesmo ótimo e o *sem* MTZ é até ligeiramente mais rápido (0,9 s
+   contra 1,3 s); em n = 10 e n = 15 nenhum dos dois prova nada, e qual deles
+   chega à melhor solução dentro do orçamento se inverte entre os dois tamanhos.
+3. **Conclusão honesta:** o MTZ ajudou de forma clara em um caso e foi neutro ou
+   errático nos demais. Com o gap aberto, o que se mede é a heurística interna
+   do CBC dentro do orçamento, não a qualidade da formulação. Quatro instâncias
+   não sustentam uma afirmação geral, e o relatório não deve fazê-la — o que
+   justifica manter as restrições (6) é o argumento teórico (relaxação mais
+   apertada, sem cortar solução inteira) somado ao ganho medido no caso em que a
+   otimalidade é alcançável.
+
+**Consequência prática para o trabalho.** Nesta escala e com este solver, o
+método exato entrega uma programação viável e verificada para a carteira
+completa, mas **não** um certificado de otimalidade. As saídas para melhorar
+isso, em ordem de custo: aumentar o tempo limite; usar um solver comercial ou o
+HiGHS (`--solver HiGHS`); ou trocar a datação por big-M por uma formulação com
+limitantes por posição, que não é o que este trabalho se propôs a fazer.
 
 **Estocagem limitada.** A área de estocagem não é modelada como capacidade
 explícita; ela é tratada indiretamente pela penalidade de antecipação `α`, que
 empurra a produção para perto do prazo (regime just-in-time). **A penalidade
 está desligada por padrão** (`α = 0`, objetivo de atraso ponderado puro) e se
 liga com `--alfa`, ou por item via `ConfigModelo.penalidade_antecipacao`.
+
+```bash
+python scripts/resolver.py --instancia data/instancias/exemplo_minimo.json --alfa 0.5
+```
+
+No exemplo mínimo o objetivo passa de 62,00 para 63,00: `TX1` termina em 28 com
+prazo 30, e as 2 u.t. de antecipação passam a custar 0,5 cada. É pouco porque a
+instância é apertada — quanto mais folga houver, mais a penalidade muda a
+programação.
 
 **Outras limitações.** Não há preempção, nem datas de liberação, nem
 indisponibilidade programada de linha; o setup é sequenciado na própria linha e

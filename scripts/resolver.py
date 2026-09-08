@@ -92,6 +92,14 @@ def montar_parser() -> argparse.ArgumentParser:
         help="grava a instância usada em JSON (útil para editar os dados depois)",
     )
     parser.add_argument(
+        "--exportar-lp",
+        metavar="ARQUIVO",
+        help=(
+            "grava o modelo em formato .lp e encerra, sem resolver; serve para "
+            "conferir a formulação restrição a restrição"
+        ),
+    )
+    parser.add_argument(
         "--verboso", action="store_true", help="mostra o log do solver"
     )
     return parser
@@ -105,6 +113,23 @@ def main(argv: list[str] | None = None) -> int:
     cfg = ConfigModelo(
         usar_mtz=not args.sem_mtz, penalidade_antecipacao=args.alfa
     )
+
+    if args.exportar_lp:
+        from rubbertech.modelo import construir, tamanho
+
+        prob, _ = construir(inst, cfg)
+        destino = Path(args.exportar_lp)
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        prob.writeLP(str(destino))
+        n_variaveis, n_restricoes = tamanho(prob)
+        print(relatorio.formatar_instancia(inst))
+        print(
+            f"\nModelo exportado para: {destino}\n"
+            f"{n_variaveis} variáveis, {n_restricoes} restrições. "
+            "O solver não foi executado."
+        )
+        return 0
+
     resultado = resolver_instancia(
         inst,
         cfg,

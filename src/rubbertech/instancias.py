@@ -73,6 +73,41 @@ FOLGA_PRAZO_DISPERSAO = 0.70
 PESOS_POSSIVEIS = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
 PESOS_PROBABILIDADES = [0.22, 0.20, 0.17, 0.14, 0.12, 0.09, 0.06]
 
+# ----------------------------------------------------------------------
+# Carteira de clientes
+# ----------------------------------------------------------------------
+#: Clientes fictícios da fábrica, cada um com sua criticidade — o peso ``w`` dos
+#: pedidos daquele cliente. A criticidade é **propriedade do cliente**, e não do
+#: pedido: um cliente crítico é crítico em todos os seus pedidos.
+#:
+#: Isso não é detalhe cosmético. Se os pesos fossem sorteados por pedido, o
+#: modelo veria uma carteira em que cada atraso é um evento isolado. Sorteados
+#: por cliente, vários pedidos passam a compartilhar o mesmo peso alto, e
+#: proteger um cliente vira uma decisão que arrasta várias alocações ao mesmo
+#: tempo — que é o que acontece na fábrica de verdade.
+CLIENTES_PADRAO: list[tuple[str, float]] = [
+    ("Adriana Prado", 8.0),
+    ("Bruno Cavalcanti", 6.0),
+    ("Camila Fontes", 5.0),
+    ("Diego Vasconcelos", 4.0),
+    ("Eduarda Nogueira", 3.0),
+    ("Fábio Assunção", 2.0),
+    ("Gabriela Munhoz", 1.0),
+    ("Henrique Salles", 8.0),
+    ("Isabela Tavares", 5.0),
+    ("Joaquim Bettencourt", 4.0),
+    ("Karina Delgado", 3.0),
+    ("Leonardo Whitaker", 2.0),
+    ("Mariana Yamamoto", 6.0),
+    ("Norberto Aguiar", 1.0),
+    ("Otávia Rezende", 4.0),
+    ("Paulo Sarmento", 2.0),
+]
+
+#: Quantos pedidos, em média, cada cliente coloca na carteira. Acima de 1 os
+#: clientes se repetem, que é o caso interessante.
+PEDIDOS_POR_CLIENTE = 2.5
+
 
 def familia(item_id: str) -> str:
     """Família tecnológica do item, deduzida do prefixo do identificador."""
@@ -133,6 +168,10 @@ def gerar_carteira(
     folga_dispersao: float = FOLGA_PRAZO_DISPERSAO,
     fator_velocidade: dict[str, float] | None = None,
     setup_tipico: float | None = None,
+    pesos: list[float] | None = None,
+    pesos_probabilidades: list[float] | None = None,
+    clientes: list[tuple[str, float]] | None = None,
+    pedidos_por_cliente: float = PEDIDOS_POR_CLIENTE,
 ) -> dict[str, Item]:
     """Gera ``n`` itens determinísticos a partir de ``seed``.
 
@@ -148,10 +187,39 @@ def gerar_carteira(
     o que garante que a instância seja estruturalmente atrasada — com prazos
     folgados o ótimo é zero e a instância não distingue um modelo certo de um
     errado.
+
+    Cada pedido é atribuído a um cliente sorteado de ``clientes`` (padrão:
+    :data:`CLIENTES_PADRAO`), e o peso ``w`` do pedido é a **criticidade desse
+    cliente**. O número de clientes é ``n / pedidos_por_cliente``, de modo que a
+    carteira tenha clientes repetidos — vários pedidos do mesmo cliente,
+    compartilhando o mesmo peso, como numa carteira real.
+
+    ``pesos`` e ``pesos_probabilidades`` desligam esse acoplamento e voltam ao
+    sorteio de peso independente por pedido: ``pesos=[1.0]`` produz a carteira de
+    pesos uniformes, em que o objetivo degenera no atraso total simples — um caso
+    de borda útil para testar se a ponderação está mesmo sendo aplicada.
     """
     rng = random.Random(seed)
     fator = fator_velocidade or FATOR_VELOCIDADE
     quantidade_cabo = round(n * frac_cabo)
+    valores_de_peso = pesos or PESOS_POSSIVEIS
+    probabilidades = pesos_probabilidades or (
+        PESOS_PROBABILIDADES if valores_de_peso is PESOS_POSSIVEIS else None
+    )
+    # Recorta a carteira de clientes para o tamanho do pedido: com poucos itens,
+    # poucos clientes — senão cada pedido teria um cliente diferente e a
+    # repetição, que é o ponto, desapareceria.
+    #
+    # O sorteio é `sample` e não uma fatia do início da lista: como o catálogo
+    # está ordenado por criticidade decrescente, pegar os primeiros faria toda
+    # carteira pequena ser formada só pelos clientes mais críticos, sem nenhum
+    # cliente barato para o modelo sacrificar. O viés apareceria como instâncias
+    # pequenas artificialmente caras e sem trade-off interessante.
+    catalogo = list(clientes if clientes is not None else CLIENTES_PADRAO)
+    quantidade_clientes = max(
+        1, min(len(catalogo), round(n / max(pedidos_por_cliente, 0.01)))
+    )
+    carteira_clientes = rng.sample(catalogo, quantidade_clientes)
 
     especificacoes: list[tuple[str, bool, dict[str, float]]] = []
     for indice in range(1, n + 1):
@@ -178,9 +246,21 @@ def gerar_carteira(
     itens: dict[str, Item] = {}
     for item_id, cabo_aco, tempos in especificacoes:
         prazo = round(rng.uniform(prazo_minimo, prazo_maximo), 1)
-        peso = rng.choices(PESOS_POSSIVEIS, weights=PESOS_PROBABILIDADES, k=1)[0]
+        nome_cliente, criticidade = rng.choice(carteira_clientes)
+        # Com `pesos` explícito, o peso volta a ser sorteado por pedido; sem
+        # ele, o peso É a criticidade do cliente que fez o pedido.
+        peso = (
+            rng.choices(valores_de_peso, weights=probabilidades, k=1)[0]
+            if pesos is not None
+            else criticidade
+        )
         itens[item_id] = Item(
-            id=item_id, p=tempos, d=prazo, w=peso, cabo_aco=cabo_aco
+            id=item_id,
+            p=tempos,
+            d=prazo,
+            w=peso,
+            cabo_aco=cabo_aco,
+            cliente=nome_cliente,
         )
     return itens
 
@@ -326,16 +406,22 @@ _REFERENCIA_TEMPOS: dict[str, dict[str, float | None]] = {
     "TX8": {"L1": 26.0, "L2": 30.0, "L3": 32.0, "L4": 36.0},
 }
 
-#: Prazos e pesos da instância de referência: ``id -> (d, w)``.
-_REFERENCIA_PRAZOS_E_PESOS: dict[str, tuple[float, float]] = {
-    "CA1": (45.0, 8.0),
-    "CA2": (95.0, 2.0),
-    "TX3": (40.0, 5.0),
-    "TX4": (30.0, 3.0),
-    "TX5": (50.0, 1.0),
-    "TX6": (35.0, 6.0),
-    "TX7": (55.0, 2.0),
-    "TX8": (42.0, 4.0),
+#: Prazos, pesos e clientes da instância de referência: ``id -> (d, w, cliente)``.
+#: Os clientes são rótulos fixos — os valores de ``d`` e ``w`` são os do enunciado
+#: e não podem mudar, sob pena de o ótimo deixar de ser 144,0. A atribuição
+#: respeita a regra do catálogo: cada cliente tem uma única criticidade, então
+#: pedidos do mesmo cliente têm o mesmo peso. Fábio Assunção (peso 2) é o único
+#: com dois pedidos, CA2 e TX7 — e o ótimo atrasa os dois, justamente por serem
+#: baratos.
+_REFERENCIA_PRAZOS_E_PESOS: dict[str, tuple[float, float, str]] = {
+    "CA1": (45.0, 8.0, "Adriana Prado"),
+    "CA2": (95.0, 2.0, "Fábio Assunção"),
+    "TX3": (40.0, 5.0, "Camila Fontes"),
+    "TX4": (30.0, 3.0, "Eduarda Nogueira"),
+    "TX5": (50.0, 1.0, "Gabriela Munhoz"),
+    "TX6": (35.0, 6.0, "Mariana Yamamoto"),
+    "TX7": (55.0, 2.0, "Fábio Assunção"),
+    "TX8": (42.0, 4.0, "Diego Vasconcelos"),
 }
 
 #: Ótimo da instância de referência, verificado por enumeração exaustiva.
@@ -355,13 +441,14 @@ def instancia_referencia() -> Instancia:
     """
     itens: dict[str, Item] = {}
     for item_id, tempos in _REFERENCIA_TEMPOS.items():
-        prazo, peso = _REFERENCIA_PRAZOS_E_PESOS[item_id]
+        prazo, peso, cliente = _REFERENCIA_PRAZOS_E_PESOS[item_id]
         itens[item_id] = Item(
             id=item_id,
             p={linha: t for linha, t in tempos.items() if t is not None},
             d=prazo,
             w=peso,
             cabo_aco=familia(item_id) == PREFIXO_CABO_ACO,
+            cliente=cliente,
         )
     inst = Instancia(
         itens=itens,

@@ -11,10 +11,10 @@ big-M calculado ..... 293,30
 RESULTADO DA RESOLUÇÃO
 ====================================================================================
 status .............. Optimal  (ótimo provado (o solver fechou o gap))
-objetivo ............ 149,90
-limite inferior ..... 149,90
+objetivo ............ 442,40
+limite inferior ..... 442,40
 gap ................. 0,00%
-tempo ............... 1,60 s
+tempo ............... 2,48 s
 tamanho do modelo ... 106 variáveis, 171 restrições
 mensagem do solver .. Optimal solution found
 conferência ......... objetivo recalculado de forma independente difere em -0,000000
@@ -24,36 +24,45 @@ conferência ......... objetivo recalculado de forma independente difere em -0,0
 PROGRAMAÇÃO DA PRODUÇÃO
 ====================================================================================
 
-Linha L1: TX5 -> TX6
+Linha L1: TX3 -> TX6
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  TX5          8,0      8,0     24,7     18,3   6,0      6,4  ATRASO
- 2  TX6          5,0     29,7     54,7     49,9   5,0      4,8  ATRASO
+ 1  TX3          8,0      8,0     32,9     21,5   8,0     11,4 Adriana Prado         ATRASO
+ 2  TX6          5,0     37,9     62,9     49,9   6,0     13,0 Bruno Cavalcanti      ATRASO
 
-Linha L2: TX3 -> TX4
+Linha L2: TX5 -> TX4
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  TX3          8,0      8,0     36,6     34,9   2,0      1,7  ATRASO
- 2  TX4          5,0     41,6     63,3     16,2   1,0     47,1  ATRASO
+ 1  TX5          8,0      8,0     27,2     18,3   8,0      8,9 Adriana Prado         ATRASO
+ 2  TX4          5,0     32,2     53,9     49,8   6,0      4,1 Bruno Cavalcanti      ATRASO
 
-Linha L3: CA1 -> CA2
+Linha L3: CA2 -> CA1
 ------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
+ #  item       setup   início      fim    prazo  peso   atraso cliente               situação
 ------------------------------------------------------------------------------------
- 1  CA1         12,0     12,0     38,1     54,4   5,0      0,0  no prazo
- 2  CA2          5,0     43,1     65,1     46,6   2,0     18,5  ATRASO
+ 1  CA2         12,0     12,0     34,0     18,7   6,0     15,3 Bruno Cavalcanti      ATRASO
+ 2  CA1          5,0     39,0     65,1     54,4   8,0     10,7 Adriana Prado         ATRASO
 
 ====================================================================================
 INDICADORES
 ------------------------------------------------------------------------------------
-atraso ponderado (objetivo) . 149,90
-atraso total (sem pesos) .... 78,50
-itens atrasados ............. 5 de 6
+atraso ponderado (objetivo) . 442,40
+atraso total (sem pesos) .... 63,40
+itens atrasados ............. 6 de 6
 makespan .................... 65,10
 tempo total de setup ........ 43,00
-ocupação por linha .......... L1=84,0%  L2=97,2%  L3=100,0%
+ocupação por linha .......... L1=96,6%  L2=82,8%  L3=100,0%
+====================================================================================
+
+====================================================================================
+ATRASO POR CLIENTE
+------------------------------------------------------------------------------------
+cliente                 peso  pedidos  atrasados     atraso  contribuição
+------------------------------------------------------------------------------------
+Adriana Prado            8,0        3          3       31,0         248,0
+Bruno Cavalcanti         6,0        3          3       32,4         194,4
 ====================================================================================
 
 VERIFICAÇÃO INDEPENDENTE: nenhuma violação encontrada.
