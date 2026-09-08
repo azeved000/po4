@@ -1,0 +1,16 @@
+{
+  "nome": "exemplo-minimo",
+  "no_inicial": "INI",
+  "linhas": ["L1", "L2"],
+  "itens": [
+    { "id": "TX1", "p": { "L1": 20, "L2": 24 }, "d": 30, "w": 5, "cabo_aco": false },
+    { "id": "TX2", "p": { "L1": 15, "L2": 18 }, "d": 25, "w": 2, "cabo_aco": false },
+    { "id": "CA1", "p": { "L2": 30 }, "d": 40, "w": 8, "cabo_aco": true }
+  ],
+  "setup": {
+    "INI": { "TX1": 8, "TX2": 8, "CA1": 12 },
+    "TX1": { "TX2": 5, "CA1": 20 },
+    "TX2": { "TX1": 5, "CA1": 20 },
+    "CA1": { "TX1": 11, "TX2": 11 }
+  }
+}

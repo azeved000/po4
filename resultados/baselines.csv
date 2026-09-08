@@ -1,0 +1,3 @@
+n,status_pli,objetivo_pli,tempo_pli_s,objetivo_EDD,objetivo_SPT,objetivo_WSPT,melhor_regra,ganho_percentual_pli,n_atrasados_pli,makespan_pli
+6,Optimal,780.0999999999999,1.604,791.5,1410.4,791.8000000000001,EDD,1.44,5,115.6
+10,Not Solved,1540.0000000000002,9.949,559.9000000000001,1005.7,973.2999999999998,EDD,-175.05,7,247.0

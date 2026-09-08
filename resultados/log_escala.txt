@@ -1,0 +1,12 @@
+
+=== ESCALA (limite de 120 s por instância) ===
+   n     vars    restr status           objetivo     lim.inf.    gap %   tempo s
+   6      126      208 Optimal            780.10       780.10     0.00      1.61
+  10      366      652 Not Solved         932.20       250.00   273.00    120.07
+  15      696     1273 Not Solved        1166.80         0.00   100.00    119.88
+  20     1220     2279 Not Solved        4537.40         0.00   100.00    119.35
+  30     2568     4894 Not Solved       11032.60         0.00   100.00    117.99
+  50     7196    13982 Not Solved       26502.90         0.00   100.00    115.59
+  80    17780    34904 Not Solved      118298.50         0.00   100.00     87.87
+
+CSV salvo em: C:\Users\COLAB-1\Documents\GitHub\po4\resultados\escala.csv
