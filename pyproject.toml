@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rubbertech"
-version = "1.0.0"
+version = "2.0.0"
 description = "Programação da produção de correias por Programação Linear Inteira Mista (EP58D)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,15 +14,10 @@ dependencies = ["pulp", "matplotlib"]
 dev = ["pytest"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+include = ["rubbertech*"]
 
 [tool.pytest.ini_options]
-# `pythonpath` evita a necessidade de instalar o pacote para rodar os testes.
-pythonpath = ["src"]
-testpaths = ["tests"]
-markers = [
-    "lento: testes que passam de ~5 s (rodam o solver em instâncias maiores)",
-]
+testpaths = ["testes.py"]
 # O PuLP 3.x avisa sobre APIs que mudarão no PuLP 4. O projeto usa de propósito
 # a API estável atual, que funciona nas duas versões; os avisos só poluiriam a
 # saída dos testes.

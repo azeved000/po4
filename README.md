@@ -10,9 +10,9 @@ são produzidos. O objetivo é minimizar o **atraso total ponderado**, `Σ w_i·
 em que o peso combina multa contratual e criticidade do cliente.
 
 A solução é obtida por **Programação Linear Inteira Mista (PLI)** — programação
-matemática exata, não heurística. As regras de despacho de `baselines.py` (EDD,
-SPT, WSPT) existem **apenas** como coluna de comparação no relatório; nenhuma
-delas é chamada pelo modelo, pelo solver ou pelo programa principal.
+matemática exata, não heurística. A regra de despacho EDD (`conferencia.edd`)
+existe **apenas** como coluna de comparação no relatório; ela não é chamada pelo
+modelo, pelo solver nem pelo caminho de solução.
 
 ---
 
@@ -81,16 +81,16 @@ aparecem assim no arquivo `.lp` exportado.
 
 | Elemento da formulação | Onde está no código |
 |---|---|
-| Conjunto `J` | `dominio.Instancia.J` |
-| Conjunto `J0` | `dominio.Instancia.J0` |
-| Conjunto `M` | `dominio.Instancia.M` |
-| Conjunto `E_i` | `dominio.Instancia.elegiveis(i)` — são as chaves de `Item.p` |
-| Arcos `(i,j,k)` válidos | `dominio.Instancia.arcos()` |
-| Parâmetro `p[i,k]` | `dominio.Instancia.p(i, k)` |
-| Parâmetro `s[i,j]` | `dominio.Instancia.s(i, j)` |
-| Parâmetros `d[i]`, `w[i]` | `dominio.Item.d`, `dominio.Item.w` |
+| Conjunto `J` | `dados.Instancia.J` |
+| Conjunto `J0` | `dados.Instancia.J0` |
+| Conjunto `M` | `dados.Instancia.M` |
+| Conjunto `E_i` | `dados.Instancia.elegiveis(i)` — são as chaves de `Item.p` |
+| Arcos `(i,j,k)` válidos | `dados.Instancia.arcos()` |
+| Parâmetro `p[i,k]` | `dados.Instancia.p(i, k)` |
+| Parâmetro `s[i,j]` | `dados.Instancia.s(i, j)` |
+| Parâmetros `d[i]`, `w[i]` | `dados.Item.d`, `dados.Item.w` |
 | Parâmetro `α[i]` | `modelo.ConfigModelo.penalidade_antecipacao` |
-| Parâmetro `V` | `dominio.Instancia.big_m()` |
+| Parâmetro `V` | `dados.Instancia.big_m()` |
 | Variável `x[i,k]` | `modelo.construir`, dicionário `x`; variável PuLP `x_{i}_{k}` |
 | Variável `y[i,j,k]` | `modelo.construir`, dicionário `y`; variável PuLP `y_{i}_{j}_{k}` |
 | Variável `C[i]` | `modelo.construir`, dicionário `C`; variável PuLP `C_{i}` |
@@ -116,7 +116,7 @@ aparecem assim no arquivo `.lp` exportado.
 V = Σ_i ( max_{k∈E_i} p[i,k] + max_{a≠i} s[a,i] ) + max_i d[i]
 ```
 
-(implementado em `dominio.Instancia.big_m()`; vale 464,0 na instância de
+(implementado em `dados.Instancia.big_m()`; vale 464,0 na instância de
 referência). A primeira parcela limita superiormente a conclusão de qualquer
 item — todos em série, sempre com o pior tempo e o pior setup de entrada — e a
 segunda cobre o termo `−d[i]` das restrições de atraso. Um `V` arbitrariamente
@@ -147,47 +147,53 @@ medido está na seção 8.
 ## 3. Arquitetura
 
 ```
-rubbertech/
+po4/
 ├── README.md
 ├── requirements.txt
-├── pyproject.toml               # metadados e configuração do pytest
-├── src/rubbertech/
-│   ├── dominio.py               # Item, Instancia, Tarefa, Programacao; validação e big-M
-│   ├── instancias.py            # geradores determinísticos por estágio + instância de referência
-│   ├── io_dados.py              # leitura e escrita de instâncias em JSON
-│   ├── modelo.py                # construção do MILP em PuLP
-│   ├── solver.py                # execução, status, gap, limite inferior
-│   ├── solucao.py               # avaliador independente e extração da solução do solver
-│   ├── validacao.py             # verificador de viabilidade e enumeração exaustiva
-│   ├── baselines.py             # regras de despacho — SÓ para comparação
-│   ├── relatorio.py             # saída textual formatada
-│   └── visual.py                # gráfico de Gantt
-├── scripts/
-│   ├── resolver.py              # CLI principal
-│   ├── validar_estagios.py      # estágios 1 a 4 contra a força bruta
-│   └── experimentos.py          # baterias de escala, MTZ e comparação
-├── data/instancias/             # instâncias em JSON
-├── resultados/                  # relatórios, gráficos e CSVs gerados
-└── tests/                       # testes automatizados (pytest)
+├── pyproject.toml          # metadados e configuração do pytest
+├── main.py                 # ponto de entrada único: resolver | validar | experimentos
+├── rubbertech/
+│   ├── __init__.py
+│   ├── dados.py            # Item, Instancia, Tarefa, Programacao; validação,
+│   │                       # big-M, gerador, instância de referência, JSON
+│   ├── modelo.py           # construção do MILP em PuLP, execução, status e gap
+│   ├── conferencia.py      # avaliador independente, verificador, força bruta, EDD
+│   └── relatorio.py        # saída textual formatada e gráfico de Gantt
+├── testes.py               # todos os testes (pytest)
+├── dados/                  # instâncias em JSON
+└── resultados/             # relatórios, gráficos e CSVs gerados
 ```
 
-**Regra de dependência.** `dominio.py` não importa nada do projeto. `modelo.py`
-importa só `dominio`. `solucao.py` e `validacao.py` importam `dominio` (e o
-`solucao`, no caso do `validacao`), nunca o modelo nem o solver. `solver.py`
-importa `modelo`. Os scripts orquestram. Nenhum módulo de `src/` escreve na tela
-fora de `relatorio.py` e `visual.py`. A consequência prática: cada peça pode ser
-testada isolada, e nenhuma delas pode "concordar" com outra por compartilhar
-código.
+**Regra de dependência.**
 
-**Por que existe um avaliador independente.** `solucao.avaliar` recebe apenas a
-ordem dos itens em cada linha — uma lista de nomes — e recalcula do zero setups,
-instantes de início e fim, atrasos e valor do objetivo. Não olha nenhuma
-variável do solver, não conhece o modelo e não importa o PuLP. É ele que diz
-quanto custa uma programação. O solver, portanto, não confirma a si mesmo: seu
-resultado é traduzido em sequências por `solucao.extrair` e reavaliado por
-`solucao.avaliar`, e a diferença entre os dois valores aparece no relatório
-(linha `conferência`). Se o modelo tivesse setup trocado, big-M curto ou erro de
-sinal, os dois números divergiriam.
+```
+dados        -> (nada)
+modelo       -> dados            [+ PuLP]
+conferencia  -> dados            [sem PuLP, sem modelo]
+relatorio    -> dados            [+ matplotlib]
+main         -> todos
+```
+
+`conferencia.py` **não pode importar `modelo.py` nem o PuLP**. É essa proibição
+que transforma o avaliador e a força bruta em segunda opinião de verdade, e não
+em eco do solver. `dados.py` não importa nada do projeto, para que o modelo e a
+conferência partam exatamente da mesma descrição do problema — se o domínio
+dependesse do modelo, um erro de modelagem se propagaria para a verificação e
+não haveria como detectá-lo.
+
+**Por que existe um avaliador independente.** `conferencia.avaliar` recebe
+apenas a ordem dos itens em cada linha — uma lista de nomes — e recalcula do
+zero setups, instantes de início e fim, atrasos e valor do objetivo. Não olha
+nenhuma variável do solver, não conhece o modelo e não importa o PuLP. É ele que
+diz quanto custa uma programação.
+
+O solver, portanto, não confirma a si mesmo. `modelo.resolver` devolve
+**somente as sequências** (`linha → ordem dos itens`), extraídas das variáveis
+`y` por `modelo.extrair_sequencias`; todo o resto do número volta a ser
+calculado do lado de fora, por `conferencia.conferir`. A diferença entre o
+objetivo do solver e o recalculado aparece no relatório na linha `conferência`.
+Se o modelo tivesse setup trocado, big-M curto ou erro de sinal, os dois números
+divergiriam.
 
 ---
 
@@ -200,12 +206,21 @@ pip install -r requirements.txt
 ```
 
 O solver CBC vem junto com o PuLP; não há nada mais para instalar. Não é preciso
-instalar o pacote — os scripts acrescentam `src/` ao caminho de busca sozinhos.
+instalar o pacote: `main.py` e `testes.py` ficam na raiz, ao lado de
+`rubbertech/`.
+
+Os três subcomandos:
+
+```bash
+python main.py resolver --instancia referencia
+python main.py validar
+python main.py experimentos --experimento todos
+```
 
 ### Exemplo 1 — resolver a instância de referência
 
 ```bash
-python scripts/resolver.py --instancia referencia
+python main.py resolver --instancia referencia
 ```
 
 ```
@@ -225,128 +240,63 @@ status .............. Optimal  (ótimo provado (o solver fechou o gap))
 objetivo ............ 144,00
 limite inferior ..... 144,00
 gap ................. 0,00%
-tempo ............... 13,47 s
+tempo ............... 14,90 s
 tamanho do modelo ... 230 variáveis, 398 restrições
 mensagem do solver .. Optimal solution found
 conferência ......... objetivo recalculado de forma independente difere em 0,000000
 ====================================================================================
-
-====================================================================================
-PROGRAMAÇÃO DA PRODUÇÃO
-====================================================================================
-
-Linha L1: TX4 -> TX8
-------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
-------------------------------------------------------------------------------------
- 1  TX4          8,0      8,0     24,0     30,0   3,0      0,0  no prazo
- 2  TX8          5,0     29,0     55,0     42,0   4,0     13,0  ATRASO
-
-Linha L2: TX6 -> TX7
-------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
-------------------------------------------------------------------------------------
- 1  TX6          8,0      8,0     29,0     35,0   6,0      0,0  no prazo
- 2  TX7          5,0     34,0     59,0     55,0   2,0      4,0  ATRASO
-
-Linha L3: TX3 -> TX5
-------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
-------------------------------------------------------------------------------------
- 1  TX3          8,0      8,0     33,0     40,0   5,0      0,0  no prazo
- 2  TX5          5,0     38,0     68,0     50,0   1,0     18,0  ATRASO
-
-Linha L4: CA1 -> CA2
-------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
-------------------------------------------------------------------------------------
- 1  CA1         12,0     12,0     51,0     45,0   8,0      6,0  ATRASO
- 2  CA2          5,0     56,0    104,0     95,0   2,0      9,0  ATRASO
-
-====================================================================================
-INDICADORES
-------------------------------------------------------------------------------------
-atraso ponderado (objetivo) . 144,00
-atraso total (sem pesos) .... 50,00
-itens atrasados ............. 5 de 8
-makespan .................... 104,00
-tempo total de setup ........ 56,00
-ocupação por linha .......... L1=52,9%  L2=56,7%  L3=65,4%  L4=100,0%
-====================================================================================
-
-VERIFICAÇÃO INDEPENDENTE: nenhuma violação encontrada.
 ```
 
-Esta programação custa 144,0, o mesmo valor da programação documentada na seção
-7. A instância tem ótimos alternativos: qual deles o CBC devolve depende da
-ordem de exploração da árvore, mas o valor é o mesmo.
+seguido da programação linha a linha, do bloco `INDICADORES` e da linha
+`VERIFICAÇÃO INDEPENDENTE: nenhuma violação encontrada.`
+
+O ótimo vale **144,0**. Há mais de uma programação de custo 144 (trocar `TX3` e
+`TX8` entre `L1` e `L3` dá o mesmo valor); a que o relatório documenta é a da
+seção 7.
 
 ### Exemplo 2 — com gráfico de Gantt e arquivo de saída
 
 ```bash
-python scripts/resolver.py --instancia estagio_4 --tempo-limite 60 --gantt resultados/gantt_estagio4.png --saida resultados/estagio4.txt
+python main.py resolver --instancia referencia --gantt resultados/gantt_referencia.png --saida resultados/referencia.txt
 ```
 
-Últimas linhas da saída:
-
-```
-====================================================================================
-INDICADORES
-------------------------------------------------------------------------------------
-atraso ponderado (objetivo) . 149,90
-atraso total (sem pesos) .... 78,50
-itens atrasados ............. 5 de 6
-makespan .................... 65,10
-tempo total de setup ........ 43,00
-ocupação por linha .......... L1=84,0%  L2=97,2%  L3=100,0%
-====================================================================================
-
-VERIFICAÇÃO INDEPENDENTE: nenhuma violação encontrada.
-
-Relatório salvo em: resultados\estagio4.txt
-Gráfico de Gantt salvo em: resultados/gantt_estagio4.png
-```
-
-No Gantt, cada item aparece como duas faixas — o setup (translúcido) e o
-processamento (sólido) —, o prazo é a linha pontilhada vertical e os itens
-atrasados levam borda e hachura.
-
-Aqui também há ótimos alternativos: o valor 149,90 se repete a cada execução,
-mas o makespan e o tempo total de setup podem variar, porque programações
-diferentes custam o mesmo atraso ponderado.
-
-### Exemplo 3 — validação dos estágios
+### Exemplo 3 — outras instâncias
 
 ```bash
-python scripts/validar_estagios.py
+python main.py resolver --instancia dados/exemplo_minimo.json
+python main.py resolver --instancia gerar:20 --tempo-limite 60
+python main.py resolver --instancia gerar:10:3:7 --sem-mtz
 ```
 
-```
-========================================================================================
-VALIDAÇÃO INCREMENTAL (n = 5, MTZ = sim)
-========================================================================================
-estágio    o que valida                          PLI  força bruta  tempo s  resultado
-----------------------------------------------------------------------------------------
-estágio 1  uma linha, setup zero               85.00        85.00     0.31  PASSOU
-estágio 2  uma linha, setup assimétrico       179.40       179.40     0.28  PASSOU
-estágio 3  armadilha de subciclo              850.80       850.80     0.56  PASSOU
-estágio 4  elegibilidade restrita             401.80       401.80     1.44  PASSOU
-----------------------------------------------------------------------------------------
-Todos os estágios passaram: o modelo reproduz o ótimo exato.
-========================================================================================
-```
+`gerar:n[:m[:seed]]` chama `dados.gerar` com `n` itens, `m` linhas e a semente
+dada (padrões `m=4`, `seed=0`).
+
+### Opções de `resolver`
+
+| Opção | Padrão | O que faz |
+|---|---|---|
+| `--instancia` | `referencia` | arquivo JSON, `referencia` ou `gerar:n[:m[:seed]]` |
+| `--tempo-limite` | `120` | limite de tempo do solver, em segundos |
+| `--sem-mtz` | desligado | desliga as restrições (6), que são redundantes |
+| `--alfa` | `0.0` | penalidade de antecipação `α`; 0 desliga |
+| `--solver` | `CBC` | `CBC` ou `HiGHS` (este exige `pip install highspy`) |
+| `--gantt` | — | salva o gráfico de Gantt no caminho dado |
+| `--saida` | — | salva o relatório textual no caminho dado |
+| `--salvar-json` | — | grava a instância usada em JSON |
+| `--verboso` | desligado | mostra o log do solver |
+
+O programa termina com código 0 quando há programação e nenhuma violação, e 1
+caso contrário.
 
 ---
 
 ## 5. Como fornecer os próprios dados
 
-Há duas formas: um arquivo JSON com os dados reais, ou os geradores
-paramétricos.
-
 ### a) Arquivo JSON
 
-Exemplo mínimo completo e funcional — 3 itens, 2 linhas, um item com cabo de aço
-que só roda em `L2`. Está em `data/instancias/exemplo_minimo.json`:
+O formato foi escolhido para ser escrito **à mão** por quem tem os dados da
+fábrica, e não para ser compacto. `dados/exemplo_minimo.json` é o menor exemplo
+completo.
 
 ```json
 {
@@ -354,20 +304,18 @@ que só roda em `L2`. Está em `data/instancias/exemplo_minimo.json`:
   "no_inicial": "INI",
   "linhas": ["L1", "L2"],
   "itens": [
-    { "id": "TX1", "p": { "L1": 20, "L2": 24 }, "d": 30, "w": 5, "cabo_aco": false },
-    { "id": "TX2", "p": { "L1": 15, "L2": 18 }, "d": 25, "w": 2, "cabo_aco": false },
-    { "id": "CA1", "p": { "L2": 30 }, "d": 40, "w": 8, "cabo_aco": true }
+    {"id": "TX1", "p": {"L1": 20, "L2": 24}, "d": 30, "w": 5, "cabo_aco": false},
+    {"id": "TX2", "p": {"L1": 15, "L2": 18}, "d": 25, "w": 2, "cabo_aco": false},
+    {"id": "CA1", "p": {"L2": 30}, "d": 40, "w": 8, "cabo_aco": true}
   ],
   "setup": {
-    "INI": { "TX1": 8, "TX2": 8, "CA1": 12 },
-    "TX1": { "TX2": 5, "CA1": 20 },
-    "TX2": { "TX1": 5, "CA1": 20 },
-    "CA1": { "TX1": 11, "TX2": 11 }
+    "INI": {"TX1": 8, "TX2": 8, "CA1": 12},
+    "TX1": {"TX2": 5, "CA1": 20},
+    "TX2": {"TX1": 5, "CA1": 20},
+    "CA1": {"TX1": 11, "TX2": 11}
   }
 }
 ```
-
-#### Campos
 
 | Campo | Tipo | Obrigatório | Significado | Unidade |
 |---|---|---|---|---|
@@ -382,183 +330,71 @@ que só roda em `L2`. Está em `data/instancias/exemplo_minimo.json`:
 | `itens[].cabo_aco` | booleano | não (padrão `false`) | marca a família do item; usado no relatório e no Gantt | — |
 | `setup` | objeto `anterior → { seguinte: número }` | **sim** | tempo de preparação entre dois itens consecutivos | tempo |
 
-#### Cinco pontos que costumam gerar dúvida
+Três pontos que costumam causar erro:
 
-1. **`p` só precisa conter as linhas elegíveis.** A ausência de uma linha em `p`
-   é a forma de declarar que o item não roda ali. No exemplo, `CA1` só tem
-   `"L2"`, e é assim que a elegibilidade restrita entra no modelo — nenhuma
-   variável é criada para `CA1` fora de `L2`.
-2. **A chave do setup é o par ordenado (anterior, seguinte).**
-   `setup["TX1"]["CA1"]` é o tempo para produzir `CA1` logo depois de `TX1`.
-3. **A matriz de setup não precisa ser simétrica, e não deve ser.** No exemplo,
-   `TX1 → CA1` custa 20 (montar o dispositivo de tração dos cabos) e
-   `CA1 → TX1` custa 11 (desmontar e limpar). É essa assimetria que dá a cada
-   linha a estrutura de um caixeiro viajante assimétrico.
-4. **O setup inicial de cada linha é a entrada cujo anterior é o nó fictício.**
-   `setup["INI"]["CA1"] = 12` significa: se `CA1` for o primeiro item de uma
-   linha, a linha gasta 12 antes de começar. O valor não depende da linha.
-5. **Unidades.** O tempo é livre (minutos, horas, turnos), desde que o mesmo em
-   `p`, `setup` e `d`. O peso `w` é adimensional e só a **proporção** entre os
-   pesos importa: dobrar todos os pesos não muda a programação ótima.
+- **`p` lista apenas as linhas elegíveis.** A ausência de uma linha é a forma de
+  dizer "este item não roda ali". `CA1`, acima, só tem `L2`.
+- **`setup` é assimétrico e de dois níveis.** `setup["TX1"]["CA1"]` (montar o
+  dispositivo de tração dos cabos, 20) e `setup["CA1"]["TX1"]` (desmontar e
+  limpar, 11) são entradas distintas e devem mesmo diferir.
+- **O setup inicial de cada linha é a entrada cujo anterior é o nó fictício.**
+  É a chave `"INI"` do exemplo.
 
-#### Rodando o exemplo
+As unidades de tempo são livres (minutos, horas, turnos), desde que as mesmas em
+`p`, `setup` e `d`. O peso `w` é adimensional: só a proporção entre pesos afeta
+a solução.
 
-```bash
-python scripts/resolver.py --instancia data/instancias/exemplo_minimo.json
-```
+A validação recusa dados impossíveis com mensagem que **nomeia o item ou o par
+responsável** — item sem linha elegível, tempo não positivo, linha inexistente,
+prazo ou peso negativo, setup ausente para um par que o modelo precisa. Um
+`KeyError` cru no meio da leitura de 80 itens não ajudaria ninguém.
 
-```
-====================================================================================
-INSTÂNCIA
-------------------------------------------------------------------------------------
-itens ............... 3 (1 com cabo de aço)
-linhas .............. 2: L1, L2
-arcos válidos ....... 13
-big-M calculado ..... 154,00
-====================================================================================
+### b) Gerador paramétrico
 
-====================================================================================
-RESULTADO DA RESOLUÇÃO
-====================================================================================
-status .............. Optimal  (ótimo provado (o solver fechou o gap))
-objetivo ............ 62,00
-limite inferior ..... 62,00
-gap ................. 0,00%
-tempo ............... 0,05 s
-tamanho do modelo ... 30 variáveis, 42 restrições
-mensagem do solver .. Optimal solution found
-conferência ......... objetivo recalculado de forma independente difere em 0,000000
-====================================================================================
-
-====================================================================================
-PROGRAMAÇÃO DA PRODUÇÃO
-====================================================================================
-
-Linha L1: TX1 -> TX2
-------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
-------------------------------------------------------------------------------------
- 1  TX1          8,0      8,0     28,0     30,0   5,0      0,0  no prazo
- 2  TX2          5,0     33,0     48,0     25,0   2,0     23,0  ATRASO
-
-Linha L2: CA1
-------------------------------------------------------------------------------------
- #  item       setup   início      fim    prazo  peso   atraso  situação
-------------------------------------------------------------------------------------
- 1  CA1         12,0     12,0     42,0     40,0   8,0      2,0  ATRASO
-
-====================================================================================
-INDICADORES
-------------------------------------------------------------------------------------
-atraso ponderado (objetivo) . 62,00
-atraso total (sem pesos) .... 25,00
-itens atrasados ............. 2 de 3
-makespan .................... 48,00
-tempo total de setup ........ 25,00
-ocupação por linha .......... L1=100,0%  L2=87,5%
-====================================================================================
-
-VERIFICAÇÃO INDEPENDENTE: nenhuma violação encontrada.
-```
-
-Para partir de uma instância existente em vez de digitar tudo, gere o JSON de um
-dos geradores e edite o arquivo:
-
-```bash
-python scripts/resolver.py --instancia estagio_4 --tempo-limite 10 --salvar-json data/instancias/minha.json
-```
-
-```
-Instância salva em: data\instancias\minha.json
-```
-
-### b) Geradores paramétricos
-
-| Gerador | Nome no CLI | O que gera | O que valida |
-|---|---|---|---|
-| `estagio_1_maquina_unica(n, seed)` | `estagio_1` | 1 linha, setup zero | o solver acha o ótimo trivial; a datação não inventa atraso |
-| `estagio_2_setup(n, seed)` | `estagio_2` | 1 linha, setup assimétrico entre famílias | timing do setup e efeito da assimetria |
-| `estagio_3_subciclos(n, seed)` | `estagio_3` | 1 linha, setup inicial caro e trocas de graça | eliminação de subciclos (restrições de tempo e MTZ) |
-| `estagio_4_elegibilidade(n, m, frac_cabo, seed)` | `estagio_4` | várias linhas, parte da carteira presa à linha dedicada | a elegibilidade é respeitada; a linha dedicada vira gargalo |
-| `estagio_5_intermediario(seed, n)` | `estagio_5` | ~20 itens, 4 linhas | desempenho do solver acima da força bruta |
-| `estagio_6_completo(seed, n)` | `estagio_6` | ~80 itens, 4 linhas, ~1/4 com cabo de aço | o problema real |
-| `instancia_referencia()` | `referencia` | 8 itens, 4 linhas, dados fixos | regressão: ótimo conhecido `Z = 144,0` |
-
-```bash
-python scripts/resolver.py --instancia estagio_5 --tempo-limite 120
-python scripts/resolver.py --instancia estagio_6 --tempo-limite 300
-```
-
-Os parâmetros que valem a pena mexer estão em constantes nomeadas no topo de
-`src/rubbertech/instancias.py`:
-
-| Parâmetro | Constante / argumento | Padrão | Efeito |
-|---|---|---|---|
-| número de itens | argumento `n` | varia por estágio | tamanho do problema |
-| número de linhas | argumento `m` (estágio 4) / `LINHAS_PADRAO` | 4 | paralelismo disponível |
-| fração com cabo de aço | argumento `frac_cabo` / `FRACAO_CABO_ACO_PADRAO` | 0,25 | pressão sobre a linha dedicada |
-| folga média dos prazos | `FOLGA_PRAZO_MEDIA` | 0,45 | prazo médio como fração do horizonte; menor = carteira mais atrasada |
-| amplitude dos prazos | `FOLGA_PRAZO_DISPERSAO` | 0,70 | dispersão dos prazos em torno da média |
-| distribuição dos pesos | `PESOS_POSSIVEIS`, `PESOS_PROBABILIDADES` | 1 a 8 | desigualdade entre clientes |
-| velocidade das linhas | `FATOR_VELOCIDADE` | 1,00 a 1,40 | o quanto as máquinas são não idênticas |
-| setups por família | `SETUP_INTRAFAMILIA`, `SETUP_TEXTIL_PARA_CABO`, `SETUP_CABO_PARA_TEXTIL`, `SETUP_INICIAL_*` | 5 / 20 / 11 / 8 e 12 | custo e assimetria da troca |
-| reprodutibilidade | argumento `seed` | varia por estágio | mesma `seed` ⇒ instância idêntica |
-
-Como os geradores são funções Python comuns, dá para montar uma instância nova
-em três linhas e salvá-la em JSON:
+Há **um** gerador determinístico, `dados.gerar`:
 
 ```python
-from rubbertech.instancias import estagio_6_completo
-from rubbertech.io_dados import salvar
-
-salvar(estagio_6_completo(seed=42, n=60), "data/instancias/carteira60.json")
+gerar(n, m=4, frac_cabo=0.25, com_setup=True, seed=0, armadilha_subciclo=None)
 ```
 
-### Erros comuns na entrada
+| Argumento | Significado |
+|---|---|
+| `n` | número de itens |
+| `m` | número de linhas; usa as `m` primeiras de `L1…L4`, e a última delas é a dedicada a cabo de aço |
+| `frac_cabo` | fração da carteira presa à linha dedicada |
+| `com_setup` | `False` zera toda a matriz de setup |
+| `seed` | semente; o gerador é determinístico, para os experimentos serem reproduzíveis |
+| `armadilha_subciclo` | quando dado, substitui a matriz de setup: entrar na linha custa esse valor e trocar de item é de graça |
 
-`Instancia.validar()` roda antes de qualquer construção de modelo e recusa:
+Os quatro estágios da validação incremental são **combinações de argumentos**, e
+não funções distintas:
 
-- instância sem itens ou sem linhas; linhas repetidas;
-- nó fictício com o mesmo nome de um item;
-- item sem nenhuma linha elegível (`p` vazio);
-- `p` declarado para uma linha que não existe em `linhas`;
-- tempo de processamento ausente, nulo, negativo ou não finito;
-- prazo `d` negativo; peso `w` negativo;
-- setup ausente para um par de itens que pode ficar consecutivo;
-- setup negativo ou não finito.
+| Estágio | Chamada | O que valida |
+|---|---|---|
+| 1 | `gerar(5, m=1, frac_cabo=0, com_setup=False)` | uma linha, sem setup: o solver acha o ótimo trivial e a datação por big-M não inventa atraso |
+| 2 | `gerar(5, m=1, frac_cabo=0.4)` | uma linha, setup assimétrico: timing do setup e efeito de `s[i,j] ≠ s[j,i]` |
+| 3 | `gerar(5, m=1, frac_cabo=0.4, armadilha_subciclo=40)` | armadilha de subciclo: só as restrições (4') seguram o modelo |
+| 4 | `gerar(5, m=3, frac_cabo=0.4)` | elegibilidade restrita: nenhuma variável para par (item, linha) impossível; a linha dedicada vira gargalo |
 
-As mensagens sempre dizem **qual** item ou par está errado. Dois casos reais:
+`armadilha_subciclo` é o único parâmetro que sobreviveu à unificação dos
+geradores, porque a estrutura de custos que ela cria — setup inicial punitivo e
+trocas gratuitas — não é expressável pelas famílias de itens. Sem ela, um modelo
+sem eliminação de subciclos acharia ótimo fechar um ciclo entre os itens e nunca
+pagar o setup inicial: solução que existe no grafo, mas não no chão de fábrica.
 
-```bash
-python scripts/resolver.py --instancia erro_sem_linha.json
-```
-
-```
-Instância inválida em 'erro_sem_linha.json': Item 'TX1' não possui nenhuma linha elegível.
-```
-
-```bash
-python scripts/resolver.py --instancia erro_sem_setup.json
-```
-
-```
-Instância inválida em 'erro_sem_setup.json': Setup ausente para o par ('TX2', 'CA1'), necessário porque existe arco válido entre esses itens.
-```
-
-Nos dois casos o programa termina com código de saída 1 e não chama o solver.
+A carteira real da fábrica é `gerar(80)` — 80 itens, 4 linhas, 25% com cabo de
+aço.
 
 ---
 
 ## 6. Como ler a saída
-
-Tomando o bloco de resultado do exemplo 1:
 
 ```
 status .............. Optimal  (ótimo provado (o solver fechou o gap))
 objetivo ............ 144,00
 limite inferior ..... 144,00
 gap ................. 0,00%
-tempo ............... 13,47 s
+tempo ............... 14,90 s
 tamanho do modelo ... 230 variáveis, 398 restrições
 mensagem do solver .. Optimal solution found
 conferência ......... objetivo recalculado de forma independente difere em 0,000000
@@ -573,6 +409,13 @@ conferência ......... objetivo recalculado de forma independente difere em 0,00
 | `tempo` | tempo de parede, incluindo a construção do modelo. |
 | `tamanho do modelo` | número de variáveis e de restrições efetivamente geradas. |
 | `conferência` | diferença entre o objetivo do solver e o objetivo recalculado do zero pelo avaliador independente. Deve ser 0. |
+
+**Convenção de unidade do gap.** Na tela e **nos CSVs** o gap está sempre em
+**porcentagem**: a coluna se chama `gap_percentual` e `80,0` quer dizer 80%.
+Internamente `modelo.Resultado.gap` guarda a fração, e `Resultado.gap_percentual`
+faz a conversão — um único ponto de verdade, para não haver tabela com fração de
+um lado e porcentagem do outro. Quando o limite inferior é 0, o gap relativo não
+é definido e a coluna sai vazia (`-` na tela).
 
 **`status = Not Solved` com objetivo preenchido não é solução ótima.** É uma
 solução viável encontrada dentro do limite de tempo — um limitante superior. O
@@ -619,13 +462,14 @@ extração da solução, e o programa termina com código 1.
 
 ## 7. Validação
 
-A correção não é assumida; é verificada em três camadas independentes.
+A correção não é assumida; é verificada em três camadas independentes, nenhuma
+das quais passa pelo solver.
 
-1. **Verificador independente** (`validacao.verificar`) — confere que cada item
-   aparece exatamente uma vez, em linha elegível, sem sobreposição temporal, com
-   os setups correspondentes aos pares consecutivos reais, e recalcula o
-   objetivo (tolerância `1e-6`).
-2. **Enumeração exaustiva** (`validacao.forca_bruta`) — para `n ≤ 8`, percorre
+1. **Verificador independente** (`conferencia.verificar`) — confere que cada
+   item aparece exatamente uma vez, em linha elegível, sem sobreposição
+   temporal, com os setups correspondentes aos pares consecutivos reais, e
+   recalcula o objetivo (tolerância `1e-6`).
+2. **Enumeração exaustiva** (`conferencia.forca_bruta`) — para `n ≤ 8`, percorre
    todas as atribuições item→linha e todas as permutações dentro de cada linha e
    devolve o ótimo verdadeiro, sem solver nenhum; é a régua contra a qual o
    modelo é medido.
@@ -666,32 +510,71 @@ programação que espalhasse o atraso igualmente entre os itens estaria
 minimizando o atraso *total*, não o atraso *ponderado* — é o teste que separa
 uma função objetivo correta de uma plausível.
 
+### Validação incremental
+
+```bash
+python main.py validar
+```
+
+```
+========================================================================================
+VALIDAÇÃO INCREMENTAL (n = 5, MTZ = sim)
+========================================================================================
+estágio    o que valida                          PLI  força bruta  tempo s  resultado
+----------------------------------------------------------------------------------------
+estágio 1  uma linha, sem setup                85.00        85.00     0.35  PASSOU
+estágio 2  uma linha, setup assimétrico       179.40       179.40     0.32  PASSOU
+estágio 3  armadilha de subciclo              850.80       850.80     0.41  PASSOU
+estágio 4  elegibilidade restrita             223.30       223.30     0.37  PASSOU
+----------------------------------------------------------------------------------------
+Todos os estágios passaram: o modelo reproduz o ótimo exato.
+========================================================================================
+```
+
+Cada estágio isola um aspecto do modelo numa instância pequena o bastante para a
+força bruta (ver a tabela da seção 5b). Se o ótimo do solver não bater com o da
+enumeração, não adianta olhar a instância de 80 itens.
+
 ### Rodando os testes
 
 ```bash
-python -m pytest tests -q
+python -m pytest testes.py -q
 ```
 
 ```
-........................................................................ [100%]
-72 passed in 18.38s
+..........................                                               [100%]
+26 passed in 20.09s
 ```
 
-Cobertura, por arquivo:
+São 20 funções de teste (26 casos, contando as parametrizadas). O critério para
+um teste estar em `testes.py` é ser capaz de acusar um erro que nada mais
+acusaria:
 
-| Arquivo | O que garante |
+| Grupo | O que garante |
 |---|---|
-| `test_dominio.py` | validação recusa instância sem linha elegível, sem `p`, sem setup, com `d` ou `w` negativo; `big_m` é positivo e domina qualquer conclusão possível |
-| `test_solucao.py` | `avaliar` reproduz um caso calculado à mão no próprio teste, com os números escritos explicitamente |
-| `test_validacao.py` | `verificar` detecta item duplicado, item ausente, linha inelegível, sobreposição, setup trocado e objetivo adulterado; `forca_bruta` bate com uma segunda enumeração escrita de forma diferente |
-| `test_modelo.py` | contagem de variáveis e restrições bate com o número de arcos válidos; nenhuma variável para linha inelegível; restrições têm os nomes documentados |
-| `test_io_dados.py` | ida e volta pelo JSON preserva a instância e o ótimo; erros de formato têm mensagem específica |
-| `test_regressao.py` | a instância de referência vale exatamente 144,0 pela força bruta, pelo avaliador e pelo modelo; o modelo bate com a força bruta em quatro instâncias pequenas com seeds fixas |
-| `test_mtz.py` | o ótimo é o mesmo com e sem MTZ (o MTZ não pode cortar solução ótima) e a relaxação linear com MTZ não é pior |
+| validação | recusa item sem linha elegível e setup ausente, com mensagem que nomeia o item ou o par; `big_m` sai dos dados e domina a pior conclusão |
+| avaliador | reproduz um caso calculado à mão, com os números escritos no próprio teste; aplica o setup assimétrico correto; recusa linha inelegível |
+| verificador | detecta item duplicado, item ausente, linha inelegível e objetivo adulterado |
+| modelo | nenhuma variável para linha inelegível; as restrições têm os nomes da formulação; `--sem-mtz` não cria as variáveis `u` |
+| JSON | ida e volta preserva a instância **e o ótimo**; a assimetria do setup sobrevive |
+| regressão | a instância de referência vale exatamente 144,0 pela força bruta, pelo avaliador e pelo modelo |
+| MTZ e força bruta | o modelo bate com a enumeração em quatro instâncias pequenas com seeds fixas, e o ótimo é o mesmo com e sem MTZ |
+| EDD | produz programação válida e nunca melhor que o ótimo |
 
 ---
 
 ## 8. Limitações e escala
+
+Todos os experimentos desta seção usam **o mesmo limite de tempo, 120 s por
+resolução**. Isso importa: com limites diferentes, o mesmo `n` apareceria com
+objetivos diferentes em tabelas distintas, e a comparação não significaria nada.
+
+```bash
+python main.py experimentos --experimento todos
+```
+
+Os CSVs vão para `resultados/` (`escala.csv`, `mtz.csv`, `edd.csv`). A coluna
+de gap se chama `gap_percentual` e está **em porcentagem** nos três.
 
 **Crescimento do modelo.** O número de variáveis `y[i,j,k]` cresce com `n²·m`.
 Medido:
@@ -699,9 +582,80 @@ Medido:
 | instância | itens | `x` | `y` | variáveis | restrições (com MTZ) |
 |---|---|---|---|---|---|
 | referência | 8 | 26 | 172 | 230 | 398 |
-| completa | 80 | 260 | 17.200 | PLACEHOLDER_VARS_80 | PLACEHOLDER_RESTR_80 |
+| completa | 80 | 260 | 17.200 | 17.780 | 34.904 |
 
-PLACEHOLDER_ESCALA
+**Onde o CBC deixa de provar otimalidade.** `resultados/escala.csv`, semente 6:
+
+| `n` | variáveis | restrições | status | objetivo | limite inferior | `gap_percentual` | tempo (s) |
+|---|---|---|---|---|---|---|---|
+| 6 | 126 | 208 | Optimal | 780,10 | 780,10 | 0,00 | 1,9 |
+| 8 | 230 | 398 | Optimal | 620,00 | 620,00 | 0,00 | 22,9 |
+| 10 | 366 | 652 | Not Solved | 935,30 | 166,66 | 461,00 | 120,0 |
+| 20 | 1220 | 2279 | Not Solved | 4 537,40 | 0,00 | — | 119,2 |
+| 80 | 17780 | 34904 | Not Solved | 118 298,50 | 0,00 | — | 87,4 |
+
+**A fronteira é entre 8 e 10 itens.** Com 8 itens o ótimo é provado em 23 s; com
+10 o solver esgota os 120 s com um limite inferior de 166,66 contra um
+incumbente de 935,30. De 20 itens em diante o limite inferior nem sai de zero, e
+o gap relativo deixa de ser definido (coluna vazia). O `objetivo` dessas linhas
+é um **limitante superior**, não o ótimo.
+
+O tempo de 87 s em `n = 80` não contradiz o limite de 120 s: nessa escala boa
+parte do orçamento vai na construção e na escrita do modelo de 17 780 variáveis,
+e o CBC encerra antes por seus próprios critérios.
+
+**MTZ ligado × desligado.** `resultados/mtz.csv`, três sementes (6, 7, 8) por
+tamanho, 30 resoluções. O que se reporta é **quantas execuções provaram
+otimalidade** e o **tempo médio até a prova** — e não a média dos objetivos:
+comparar incumbentes de execuções que não convergiram não permite conclusão,
+porque cada uma parou num ponto diferente da árvore de busca.
+
+| MTZ | provou ótimo | tempo médio até a prova |
+|---|---|---|
+| sim | 6 de 15 | 21,2 s |
+| não | 6 de 15 | 20,3 s |
+
+**As restrições (6) não pagaram o próprio custo nestas instâncias.** Provam
+otimalidade nos mesmos 6 casos (`n = 6` e `n = 8`, todas as sementes) e com
+tempo médio praticamente igual — 21,2 s contra 20,3 s, diferença dentro do
+ruído. Em `n = 10` o efeito chega a ser adverso: com MTZ o limite inferior fica
+em 166,66 (semente 6), contra 363,59 sem MTZ. As 258 restrições adicionais
+encarecem cada relaxação linear mais do que estreitam o limitante.
+
+Isso não invalida o argumento teórico — o MTZ *pode* fortalecer a relaxação —
+mas mostra que, com este big-M e este solver, o ganho não aparece na faixa
+testada. O padrão continua `usar_mtz=True` porque é a formulação descrita no
+relatório; `--sem-mtz` permite reproduzir a coluna de comparação. O que os dois
+lados **sempre** concordam é no ótimo, quando ele é provado: é o que
+`testes.py::test_otimo_identico_com_e_sem_mtz` garante.
+
+**Modelo exato × EDD.** `resultados/edd.csv`, três sementes por tamanho. O EDD
+é apenas régua de comparação; não é o método de solução do trabalho.
+
+| `n` | status do PLI | objetivo PLI (média) | objetivo EDD (média) | ganho médio do PLI¹ |
+|---|---|---|---|---|
+| 6 | Optimal (3/3) | 534,3 | 663,8 | +21,3% |
+| 8 | Optimal (3/3) | 466,9 | 652,0 | +25,2% |
+| 10 | Not Solved (0/3) | 870,4 | 916,0 | −5,1% |
+| 20 | Not Solved (0/3) | 5 302,6 | 1 427,2 | −335,1% |
+| 80 | Not Solved (0/3) | 109 976,8 | 5 085,3 | −2 809,3% |
+
+¹ média dos ganhos calculados instância a instância, `(EDD − PLI) / EDD`, e
+não o ganho entre as médias das duas colunas anteriores.
+
+**O modelo exato só ganha do EDD onde consegue provar o ótimo.** Em `n ≤ 8` o
+ganho é de 21% a 25% em média (chegando a 47% na semente 8 com `n = 8`), e vem
+de agrupar itens da mesma família para economizar preparação — decisão que o EDD
+não enxerga, porque ordena por prazo e despacha para a linha que termina antes.
+
+Acima disso o resultado se inverte, e é preciso dizê-lo sem maquiagem: em 120 s
+o incumbente do CBC é **pior** que o do EDD, e muito pior em `n = 80`. O
+*branch-and-bound* gasta o orçamento provando limites em vez de melhorar a
+solução, e a formulação big-M dá um incumbente inicial ruim. Para a carteira
+completa, portanto, o modelo exato desta formulação **não** é utilizável no
+limite de tempo adotado: ou se aumenta muito o tempo, ou se troca de solver
+(HiGHS), ou se aceita a regra de despacho como ponto de partida. É a limitação
+central do trabalho, e a seção 5 da conclusão do relatório precisa registrá-la.
 
 **Estocagem limitada.** A área de estocagem não é modelada como capacidade
 explícita; ela é tratada indiretamente pela penalidade de antecipação `α`, que
