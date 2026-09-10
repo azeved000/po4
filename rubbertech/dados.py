@@ -380,12 +380,14 @@ def gerar(
         tempos = {k: round(base * FATOR_VELOCIDADE[k], 1) for k in elegiveis}
         especificacoes.append((f"{prefixo}{indice}", cabo_aco, tempos))
 
-    # Horizonte de uma linha: carga total mais um setup típico por item.
-    if not com_setup:
-        setup_tipico = 0.0
-    elif armadilha_subciclo is not None:
+    # Horizonte de uma linha: carga total mais um setup típico por item. A
+    # ordem das condições espelha a que monta o `setup` de fato mais abaixo,
+    # para as duas nunca discordarem sobre qual estrutura de custo vale.
+    if armadilha_subciclo is not None:
         setup_tipico = armadilha_subciclo / n
-    elif quantidade_cabo:
+    elif not com_setup:
+        setup_tipico = 0.0
+    elif frac_cabo:
         setup_tipico = (SETUP_INTRAFAMILIA + SETUP_TEXTIL_PARA_CABO) / 2
     else:
         setup_tipico = SETUP_INTRAFAMILIA
