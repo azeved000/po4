@@ -17,6 +17,8 @@ acoplamento real com o solver.
 from __future__ import annotations
 
 import sys
+import textwrap
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
@@ -156,10 +158,21 @@ def formatar_resultado(res: Resultado, divergencia: float | None = None) -> str:
             f"difere em {_numero(divergencia, 6)}"
         )
     if res.status == "Not Solved":
+        limite_txt = (
+            f"{res.tempo_limite} s" if res.tempo_limite is not None else "configurado"
+        )
+        # Destacado com régua própria: é a informação mais fácil de passar
+        # despercebida na saída inteira — sem ela, "Not Solved" com um objetivo
+        # preenchido parece, à primeira vista, uma solução como outra qualquer.
         linhas += [
             "",
-            "ATENÇÃO: o valor acima é um limitante superior. O ótimo está entre o",
-            "limite inferior e o objetivo; o gap mede essa distância.",
+            _regua("!"),
+            f"ATENÇÃO: atingiu o limite de {limite_txt}: a solução abaixo é VIÁVEL,",
+            "mas NÃO é comprovadamente ótima. O ótimo verdadeiro está entre o",
+            "limite inferior e o objetivo mostrados acima; o gap mede essa",
+            "distância. Para tentar fechar o gap, use --tempo-limite com um valor",
+            "maior (ver 'Como alterar o limite de tempo do solver' no README).",
+            _regua("!"),
         ]
     linhas.append(_regua("="))
     return "\n".join(linhas)
@@ -226,6 +239,293 @@ def formatar_violacoes(violacoes: list[str]) -> str:
         [f"VERIFICAÇÃO INDEPENDENTE: {len(violacoes)} violação(ões)!"]
         + [f"  - {violacao}" for violacao in violacoes]
     )
+
+
+# ----------------------------------------------------------------------
+# Legenda: campos de entrada e indicadores de saída
+# ----------------------------------------------------------------------
+# Fonte única desta informação: o texto aqui é reproduzido, quase literalmente,
+# em `dados/COMO_PREENCHER.md`. Não repita este conteúdo em outro lugar do
+# projeto (README incluído) — aponte para `python main.py legenda` ou para o
+# arquivo. Ver seção 5 do README.
+
+#: (campo, símbolo na formulação, o que significa, unidade, obrigatório, exemplo)
+CAMPOS_ENTRADA: list[tuple[str, str, str, str, str, str]] = [
+    (
+        "nome",
+        "—",
+        "rótulo da instância; só identificação, não entra no modelo",
+        "—",
+        "não (padrão 'instancia')",
+        '"referencia"',
+    ),
+    (
+        "no_inicial",
+        "0 (nó fictício)",
+        "rótulo do nó fictício de início de linha; não pode coincidir com o id de um item",
+        "—",
+        "não (padrão 'INI')",
+        '"INI"',
+    ),
+    (
+        "linhas",
+        "M",
+        "nomes das linhas de produção",
+        "—",
+        "sim",
+        '["L1", "L2"]',
+    ),
+    (
+        "itens[].id",
+        "i ∈ J",
+        "identificador único do item",
+        "—",
+        "sim",
+        '"TX1"',
+    ),
+    (
+        "itens[].p",
+        "p[i,k]",
+        "tempo de processamento por linha ELEGÍVEL; a linha ausente diz 'não roda aqui'",
+        "tempo (livre)",
+        "sim",
+        '{"L1": 20, "L2": 24}',
+    ),
+    (
+        "itens[].d",
+        "d[i]",
+        "prazo de entrega, contado a partir de zero",
+        "tempo (= unidade de p)",
+        "sim",
+        "30",
+    ),
+    (
+        "itens[].w",
+        "w[i]",
+        "peso do atraso (multa contratual x criticidade do cliente)",
+        "adimensional",
+        "sim",
+        "5",
+    ),
+    (
+        "itens[].cabo_aco",
+        "—",
+        "rótulo de família para relatório e Gantt; NÃO restringe elegibilidade",
+        "—",
+        "não (padrão false)",
+        "true",
+    ),
+    (
+        "setup",
+        "s[i,j]",
+        "preparação para produzir j logo após i; indexado por (anterior, seguinte)",
+        "tempo (= unidade de p e d)",
+        "sim",
+        '{"INI": {"TX1": 8}, "TX1": {"TX2": 5}}',
+    ),
+]
+
+#: Cinco pontos que costumam causar erro — texto corrido, e não tabela, porque
+#: são explicações e não campos.
+NOTAS_ENTRADA: list[str] = [
+    "'p' só lista as linhas ELEGÍVEIS. É a omissão de uma linha dentro de 'p' "
+    "que impede o item de ser produzido nela — não existe uma lista separada de "
+    "restrições. O campo 'cabo_aco' é apenas rótulo para os relatórios e não "
+    "restringe nada.",
+    "'setup' é indexado por par ORDENADO (item anterior, item seguinte), e não "
+    "precisa ser simétrico: setup[\"TX1\"][\"CA1\"] pode (e costuma) diferir de "
+    "setup[\"CA1\"][\"TX1\"]. É essa assimetria que representa montar contra "
+    "desmontar o dispositivo de tração dos cabos.",
+    "A chave \"INI\" (ou o valor de 'no_inicial') guarda o setup INICIAL de cada "
+    "linha, aplicado ao primeiro item produzido nela.",
+    "Unidades de tempo são livres, desde que CONSISTENTES entre 'p', 'setup' e "
+    "'d'. Se 'p' está em horas, 'd' precisa estar em horas — misturar unidades "
+    "não dá erro de validação, só resultado sem sentido.",
+    "'w' é adimensional e só a PROPORÇÃO entre os pesos importa: dobrar todos "
+    "os pesos dobra o objetivo sem mudar a programação ótima.",
+]
+
+#: (indicador, formato, o que significa)
+CAMPOS_SAIDA_RESULTADO: list[tuple[str, str, str]] = [
+    (
+        "status",
+        "Optimal | Not Solved | Infeasible | Undefined",
+        "Optimal = ótimo provado (gap = 0). Not Solved = o solver parou no limite "
+        "de tempo com uma solução VIÁVEL na mão — o objetivo é um limitante "
+        "superior, não o ótimo. Infeasible = nenhuma programação satisfaz as "
+        "restrições. Undefined = o solver não devolveu nada utilizável.",
+    ),
+    (
+        "objetivo",
+        "número, ou '-'",
+        "valor de Σ w_i·T_i (mais Σ α_i·A_i se --alfa > 0) da melhor solução "
+        "encontrada; '-' quando não há solução (status Infeasible/Undefined).",
+    ),
+    (
+        "limite inferior",
+        "número, ou '-'",
+        "melhor limitante inferior provado pelo branch-and-bound; igual ao "
+        "objetivo quando status = Optimal.",
+    ),
+    (
+        "gap",
+        "porcentagem, ou '-'",
+        "(objetivo − limite inferior) / limite inferior, em %. Zero = ótimo "
+        "provado. INDEFINIDO ('-' na tela) quando o limite inferior é 0: falta "
+        "de informação sobre a qualidade da solução, e não indício de solução "
+        "ruim.",
+    ),
+    (
+        "tempo",
+        "segundos",
+        "tempo de parede da resolução, incluindo a construção do modelo — não é "
+        "o --tempo-limite pedido, é o que a execução de fato levou.",
+    ),
+    (
+        "tamanho do modelo",
+        "N variáveis, N restrições",
+        "quantidade efetivamente gerada pelo modelo para esta instância "
+        "(depende da elegibilidade: linhas inelegíveis não geram variável).",
+    ),
+    (
+        "conferência",
+        "número (diferença)",
+        "objetivo recalculado do zero pelo avaliador independente menos o "
+        "objetivo do solver; deve ser ~0. Só aparece quando há programação.",
+    ),
+]
+
+#: (coluna da tabela de programação, símbolo, o que significa)
+CAMPOS_SAIDA_PROGRAMACAO: list[tuple[str, str, str]] = [
+    (
+        "setup",
+        "s[anterior, item]",
+        "preparação paga ANTES deste item, referente ao par (item anterior, "
+        "este item); no primeiro item da linha é o setup inicial (s[INI, i]).",
+    ),
+    (
+        "início / fim",
+        "C_i (janela)",
+        "janela de processamento do item, já depois do setup: o setup ocupa de "
+        "'início - setup' até 'início'.",
+    ),
+    ("prazo", "d_i", "prazo de entrega do item."),
+    ("peso", "w_i", "peso do atraso do item."),
+    (
+        "atraso",
+        "T_i",
+        "T_i = max(0, fim - prazo); a coluna 'situação' mostra 'ATRASO' quando "
+        "T_i > 0, 'no prazo' caso contrário.",
+    ),
+]
+
+
+def _tabela(
+    cabecalhos: Sequence[str],
+    linhas: Sequence[Sequence[str]],
+    larguras_max: Sequence[int | None] | None = None,
+) -> str:
+    """Tabela ASCII de largura variável — sem unicode de caixa, mesma razão do
+    resto do módulo. Colunas sem `larguras_max` usam a largura do maior valor;
+    colunas com um limite quebram o texto em várias linhas dentro da célula, em
+    vez de produzir uma tabela larga demais para caber num terminal comum.
+    """
+    n_colunas = len(cabecalhos)
+    limites = list(larguras_max) if larguras_max is not None else [None] * n_colunas
+
+    def _celulas(valor: str, limite: int | None) -> list[str]:
+        texto = str(valor)
+        if limite is None or len(texto) <= limite:
+            return [texto]
+        return textwrap.wrap(texto, width=limite) or [""]
+
+    linhas_quebradas = [
+        [_celulas(valor, limites[c]) for c, valor in enumerate(linha)] for linha in linhas
+    ]
+    larguras = [
+        max(
+            len(str(cabecalhos[c])),
+            max(
+                (len(parte) for linha in linhas_quebradas for parte in linha[c]),
+                default=0,
+            ),
+        )
+        for c in range(n_colunas)
+    ]
+
+    def _linha(valores: Sequence[str]) -> str:
+        return "  ".join(str(v).ljust(larguras[i]) for i, v in enumerate(valores))
+
+    corpo = [_linha(cabecalhos), _regua("-", sum(larguras) + 2 * (n_colunas - 1))]
+    for linha in linhas_quebradas:
+        for indice in range(max(len(coluna) for coluna in linha)):
+            corpo.append(
+                _linha([coluna[indice] if indice < len(coluna) else "" for coluna in linha])
+            )
+    return "\n".join(corpo)
+
+
+def formatar_legenda_entrada() -> str:
+    """Tabela de campos do JSON de entrada, com as notas que evitam erro comum."""
+    linhas = [
+        _regua("="),
+        "LEGENDA — CAMPOS DE ENTRADA (arquivo JSON)",
+        _regua("="),
+        _tabela(
+            ["campo", "símbolo", "o que significa", "unidade", "obrigatório", "exemplo"],
+            CAMPOS_ENTRADA,
+            larguras_max=[None, None, 42, 20, None, None],
+        ),
+        "",
+        "Pontos que costumam causar erro:",
+    ]
+    linhas += [f"  {n + 1}. {nota}" for n, nota in enumerate(NOTAS_ENTRADA)]
+    linhas += [
+        "",
+        "Exemplo completo e guia de preenchimento: dados/COMO_PREENCHER.md",
+        _regua("="),
+    ]
+    return "\n".join(linhas)
+
+
+def formatar_legenda_saida() -> str:
+    """Tabela dos indicadores do bloco RESULTADO e das colunas da programação."""
+    linhas = [
+        _regua("="),
+        "LEGENDA — INDICADORES DE SAÍDA",
+        _regua("="),
+        "Bloco RESULTADO DA RESOLUÇÃO:",
+        _tabela(
+            ["indicador", "formato", "o que significa"],
+            CAMPOS_SAIDA_RESULTADO,
+            larguras_max=[None, None, 46],
+        ),
+        "",
+        "Colunas da tabela de PROGRAMAÇÃO:",
+        _tabela(
+            ["coluna", "símbolo", "o que significa"],
+            CAMPOS_SAIDA_PROGRAMACAO,
+            larguras_max=[None, None, 46],
+        ),
+        "",
+        "Dois pontos que costumam ser lidos errado:",
+        "  1. status = 'Not Solved' com objetivo preenchido é uma solução VIÁVEL,",
+        "     não a ótima — o objetivo é um limitante superior.",
+        "  2. gap indefinido ('-', quando o limite inferior é 0) significa AUSÊNCIA",
+        "     de informação sobre a qualidade da solução, não solução ruim.",
+        _regua("="),
+    ]
+    return "\n".join(linhas)
+
+
+def formatar_legenda(entrada: bool = True, saida: bool = True) -> str:
+    """Junta as duas legendas, respeitando quais foram pedidas."""
+    blocos = []
+    if entrada:
+        blocos.append(formatar_legenda_entrada())
+    if saida:
+        blocos.append(formatar_legenda_saida())
+    return "\n\n".join(blocos)
 
 
 def imprimir(texto: str, arquivo: TextIO | None = None) -> None:

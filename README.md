@@ -209,13 +209,17 @@ O solver CBC vem junto com o PuLP; não há nada mais para instalar. Não é pre
 instalar o pacote: `main.py` e `testes.py` ficam na raiz, ao lado de
 `rubbertech/`.
 
-Os três subcomandos:
+Os quatro subcomandos:
 
 ```bash
 python main.py resolver --instancia referencia
 python main.py validar
 python main.py experimentos --experimento todos
+python main.py legenda
 ```
+
+`legenda` explica os campos de entrada e os indicadores de saída sem exigir
+leitura de código — ver a seção 5 para o uso.
 
 ### Exemplo 1 — resolver a instância de referência
 
@@ -276,7 +280,7 @@ dada (padrões `m=4`, `seed=0`).
 | Opção | Padrão | O que faz |
 |---|---|---|
 | `--instancia` | `referencia` | arquivo JSON, `referencia` ou `gerar:n[:m[:seed]]` |
-| `--tempo-limite` | `120` | limite de tempo do solver, em segundos |
+| `--tempo-limite` | `300` | limite de tempo do solver, em segundos |
 | `--sem-mtz` | desligado | desliga as restrições (6), que são redundantes |
 | `--alfa` | `0.0` | penalidade de antecipação `α`; 0 desliga |
 | `--solver` | `CBC` | `CBC` ou `HiGHS` (este exige `pip install highspy`) |
@@ -287,6 +291,39 @@ dada (padrões `m=4`, `seed=0`).
 
 O programa termina com código 0 quando há programação e nenhuma violação, e 1
 caso contrário.
+
+### Como alterar o limite de tempo do solver
+
+Há duas formas, para dois usos diferentes.
+
+**Por execução, pela linha de comando** — vale só para aquele comando. Nos três
+subcomandos que resolvem alguma coisa, é `--tempo-limite`, em segundos:
+
+```bash
+python main.py resolver --instancia referencia --tempo-limite 600
+python main.py validar --tempo-limite 60
+python main.py experimentos --tempo-limite 300
+```
+
+**Mudando o padrão** — para não repetir a opção toda vez. Altere
+`TEMPO_LIMITE_PADRAO` em [`rubbertech/modelo.py`](rubbertech/modelo.py) (valor
+atual: `300`). O número é em **segundos** e passa a valer para os três
+subcomandos (`resolver`, `validar` e `experimentos`) sempre que `--tempo-limite`
+não for informado.
+
+Três observações:
+
+- **O limite é por resolução, não pelo comando inteiro.** Em `experimentos`,
+  que resolve dezenas de instâncias, o tempo total é aproximadamente o limite
+  multiplicado pelo número de resoluções que não convergirem antes.
+- **Atingir o limite não é erro.** O programa devolve a melhor solução viável
+  encontrada, sinalizada no `status` (`Not Solved`), e o `gap` indica quão
+  longe do ótimo ela pode estar. O relatório destaca isso com um aviso.
+- **Aumentar o limite ajuda em instâncias médias, mas não resolve a escala de
+  80 itens.** Pelos experimentos da seção 8, nessa escala o limite inferior
+  permanece em zero e o gap fica indefinido independentemente do tempo
+  concedido — o gargalo não é tempo insuficiente, é o incumbente inicial ruim
+  da formulação big-M nesse tamanho.
 
 ---
 
@@ -317,37 +354,17 @@ completo.
 }
 ```
 
-| Campo | Tipo | Obrigatório | Significado | Unidade |
-|---|---|---|---|---|
-| `nome` | texto | não | rótulo da instância, só para identificação | — |
-| `no_inicial` | texto | não (padrão `"INI"`) | rótulo do nó fictício de início de linha; não pode coincidir com o id de um item | — |
-| `linhas` | lista de textos | **sim** | nomes das linhas de produção | — |
-| `itens` | lista de objetos | **sim** | a carteira de pedidos | — |
-| `itens[].id` | texto | **sim** | identificador único do item | — |
-| `itens[].p` | objeto `linha → número` | **sim** | tempo de processamento por linha **elegível** | tempo |
-| `itens[].d` | número ≥ 0 | **sim** | prazo de entrega, contado a partir de zero | tempo |
-| `itens[].w` | número ≥ 0 | **sim** | peso do atraso (multa × criticidade do cliente) | adimensional |
-| `itens[].cabo_aco` | booleano | não (padrão `false`) | marca a família do item; usado no relatório e no Gantt | — |
-| `setup` | objeto `anterior → { seguinte: número }` | **sim** | tempo de preparação entre dois itens consecutivos | tempo |
+O que cada campo significa, a unidade, se é obrigatório e os pontos que
+costumam causar erro (elegibilidade em `p`, assimetria do `setup`, setup
+inicial em `"INI"`, unidades livres mas consistentes, `w` adimensional) estão
+documentados em **um lugar só**, para não haver duas versões da mesma
+explicação a divergir com o tempo:
 
-Três pontos que costumam causar erro:
-
-- **`p` lista apenas as linhas elegíveis.** A ausência de uma linha é a forma de
-  dizer "este item não roda ali". `CA1`, acima, só tem `L2`.
-- **`setup` é assimétrico e de dois níveis.** `setup["TX1"]["CA1"]` (montar o
-  dispositivo de tração dos cabos, 20) e `setup["CA1"]["TX1"]` (desmontar e
-  limpar, 11) são entradas distintas e devem mesmo diferir.
-- **O setup inicial de cada linha é a entrada cujo anterior é o nó fictício.**
-  É a chave `"INI"` do exemplo.
-
-As unidades de tempo são livres (minutos, horas, turnos), desde que as mesmas em
-`p`, `setup` e `d`. O peso `w` é adimensional: só a proporção entre pesos afeta
-a solução.
-
-A validação recusa dados impossíveis com mensagem que **nomeia o item ou o par
-responsável** — item sem linha elegível, tempo não positivo, linha inexistente,
-prazo ou peso negativo, setup ausente para um par que o modelo precisa. Um
-`KeyError` cru no meio da leitura de 80 itens não ajudaria ninguém.
+- `python main.py legenda --entrada` — a mesma tabela, formatada no terminal;
+- [`dados/COMO_PREENCHER.md`](dados/COMO_PREENCHER.md) — a tabela por escrito,
+  um exemplo completo de 3 itens prontos para copiar, e a mensagem real que a
+  validação devolve para os erros mais comuns (item sem linha elegível, setup
+  faltando, prazo negativo).
 
 ### b) Gerador paramétrico
 
@@ -389,6 +406,9 @@ aço.
 
 ## 6. Como ler a saída
 
+A referência rápida destes indicadores também está disponível no terminal, com
+`python main.py legenda --saida`.
+
 ```
 status .............. Optimal  (ótimo provado (o solver fechou o gap))
 objetivo ............ 144,00
@@ -420,14 +440,20 @@ um lado e porcentagem do outro. Quando o limite inferior é 0, o gap relativo n�
 **`status = Not Solved` com objetivo preenchido não é solução ótima.** É uma
 solução viável encontrada dentro do limite de tempo — um limitante superior. O
 ótimo está entre o limite inferior e o objetivo, e o `gap` diz o tamanho dessa
-faixa. Nesse caso o relatório imprime, logo abaixo:
+faixa. Nesse caso o relatório imprime, destacado, o limite que foi atingido:
 
 ```
-ATENÇÃO: o valor acima é um limitante superior. O ótimo está entre o
-limite inferior e o objetivo; o gap mede essa distância.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ATENÇÃO: atingiu o limite de 300 s: a solução abaixo é VIÁVEL,
+mas NÃO é comprovadamente ótima. O ótimo verdadeiro está entre o
+limite inferior e o objetivo mostrados acima; o gap mede essa
+distância. Para tentar fechar o gap, use --tempo-limite com um valor
+maior (ver 'Como alterar o limite de tempo do solver' no README).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ```
 
-Para aumentar o tempo disponível, use `--tempo-limite` (em segundos).
+O valor no aviso é o `--tempo-limite` efetivamente usado naquela execução, não
+um número fixo. Ver "Como alterar o limite de tempo do solver" na seção 4.
 
 Na tabela de programação, cada linha de item se lê assim:
 
@@ -566,8 +592,19 @@ acusaria:
 ## 8. Limitações e escala
 
 Todos os experimentos desta seção usam **o mesmo limite de tempo, 120 s por
-resolução**. Isso importa: com limites diferentes, o mesmo `n` apareceria com
-objetivos diferentes em tabelas distintas, e a comparação não significaria nada.
+resolução** — o valor de `TEMPO_LIMITE_PADRAO` em vigor quando estes CSVs foram
+gerados. Isso importa: com limites diferentes, o mesmo `n` apareceria com
+objetivos diferentes em tabelas distintas, e a comparação não significaria
+nada.
+
+> **Nota de reprodutibilidade.** O padrão do projeto mudou para 300 s (ver
+> "Como alterar o limite de tempo do solver", seção 4); os CSVs em
+> `resultados/` **não** foram regravados com o novo padrão — refazê-los para
+> `n = 80` a 300 s custaria horas de execução, e os números abaixo continuam
+> válidos como estão, desde que lidos com o limite de 120 s que os gerou. Para
+> reproduzir esta seção com o padrão atual, rode `python main.py experimentos
+> --experimento todos` (usa 300 s automaticamente) ou passe `--tempo-limite 120`
+> para comparar com os números exatos abaixo.
 
 ```bash
 python main.py experimentos --experimento todos

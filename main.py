@@ -1,10 +1,11 @@
 """Ponto de entrada único do projeto RubberTech.
 
-Três subcomandos::
+Quatro subcomandos::
 
     python main.py resolver --instancia referencia
     python main.py validar
     python main.py experimentos --experimento todos
+    python main.py legenda
 
 ``resolver``
     resolve uma instância por PLI, imprime o relatório e **confere a solução de
@@ -14,6 +15,10 @@ Três subcomandos::
     do modelo, confrontados com a enumeração exaustiva.
 ``experimentos``
     bateria de escala, MTZ e comparação com EDD, gravando CSV em ``resultados/``.
+``legenda``
+    explica, sem exigir leitura de código, os campos do JSON de entrada e os
+    indicadores do relatório de saída (``--entrada`` ou ``--saida`` para só uma
+    parte).
 
 Este é o único módulo que importa todos os demais.
 """
@@ -416,6 +421,26 @@ def comando_experimentos(args: argparse.Namespace) -> int:
 
 
 # ======================================================================
+# Subcomando: legenda
+# ======================================================================
+def comando_legenda(args: argparse.Namespace) -> int:
+    """Explica os campos de entrada e/ou os indicadores de saída, sem código.
+
+    Sem ``--entrada``/``--saida`` imprime as duas; com um dos dois, só aquela
+    parte. É a mesma tabela de campos de ``dados/COMO_PREENCHER.md`` — ver o
+    comentário no topo de ``relatorio.py`` sobre onde mora essa informação.
+    """
+    mostrar_ambos = not (args.entrada or args.saida)
+    print(
+        relatorio.formatar_legenda(
+            entrada=args.entrada or mostrar_ambos,
+            saida=args.saida or mostrar_ambos,
+        )
+    )
+    return 0
+
+
+# ======================================================================
 # CLI
 # ======================================================================
 def montar_parser() -> argparse.ArgumentParser:
@@ -485,6 +510,18 @@ def montar_parser() -> argparse.ArgumentParser:
     )
     p_exp.add_argument("--tamanhos", type=int, nargs="+", default=TAMANHOS)
     p_exp.set_defaults(funcao=comando_experimentos)
+
+    p_legenda = sub.add_parser(
+        "legenda", help="explica os campos de entrada e os indicadores de saída"
+    )
+    p_legenda.add_argument(
+        "--entrada", action="store_true", help="mostra só os campos do JSON de entrada"
+    )
+    p_legenda.add_argument(
+        "--saida", action="store_true",
+        help="mostra só os indicadores do relatório de saída",
+    )
+    p_legenda.set_defaults(funcao=comando_legenda)
 
     return parser
 
