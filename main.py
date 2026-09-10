@@ -239,7 +239,10 @@ def _escrever_csv(nome: str, linhas: list[dict[str, object]]) -> Path:
 
     Convenção das colunas de gap: **``gap_percentual`` está sempre em
     porcentagem** (80,0 = 80%), a mesma unidade mostrada na tela. Guardar fração
-    no arquivo e porcentagem na tela já produziu tabela lida errado.
+    no arquivo e porcentagem na tela já produziu tabela lida errado. Quando o
+    gap é indefinido (limite inferior 0 ou indisponível), a célula grava a
+    palavra ``indefinido`` (ver :func:`_valor_csv_gap`) — nunca vazia, que seria
+    ambígua com dado faltando.
     """
     PASTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
     destino = PASTA_RESULTADOS / nome
@@ -255,10 +258,21 @@ def _col(valor: float | None, largura: int = 12, casas: int = 2) -> str:
     return f"{'-' if valor is None else format(valor, f'.{casas}f'):>{largura}}"
 
 
+def _col_gap(valor: float | None, largura: int = 11, casas: int = 2) -> str:
+    """Coluna de gap: número, ou a palavra ``indefinido`` — nunca um traço.
+
+    Mesma convenção do relatório detalhado (:func:`relatorio.texto_gap`): gap
+    indefinido é o achado, não uma falha de formatação, e ``-`` lê como a
+    segunda coisa.
+    """
+    texto = "indefinido" if valor is None else format(valor, f".{casas}f")
+    return f"{texto:>{largura}}"
+
+
 def _linha_solver(res: Resultado, prefixo: str) -> str:
     """Linha de tabela com status, objetivo, limite inferior, gap e tempo."""
     return (f"{prefixo} {res.status:<12} {_col(res.objetivo)} "
-            f"{_col(res.limite_inferior)} {_col(res.gap_percentual, 8)} "
+            f"{_col(res.limite_inferior)} {_col_gap(res.gap_percentual)} "
             f"{res.tempo_s:9.2f}")
 
 
@@ -266,12 +280,21 @@ def _arredondar(valor: float | None, casas: int = 2) -> float | None:
     return None if valor is None else round(valor, casas)
 
 
+def _valor_csv_gap(gap_percentual: float | None) -> float | str:
+    """Valor da coluna ``gap_percentual`` no CSV: número arredondado, ou a
+    palavra ``indefinido`` — nunca vazio. Campo vazio em CSV é ambíguo com
+    dado faltando; aqui a ausência de gap **é** o resultado (ver seção 8 do
+    README), e precisa ser lida como tal, não como uma célula que falhou.
+    """
+    return "indefinido" if gap_percentual is None else _arredondar(gap_percentual)
+
+
 def experimento_escala(tempo_limite: int, tamanhos: list[int]) -> Path:
     """Tempo, tamanho do modelo e gap por tamanho de instância."""
     print(f"\n=== ESCALA (limite de {tempo_limite} s por instância) ===")
     print(
         f"{'n':>4} {'vars':>8} {'restr':>8} {'status':<12} {'objetivo':>12} "
-        f"{'lim.inf.':>12} {'gap %':>8} {'tempo s':>9}"
+        f"{'lim.inf.':>12} {'gap %':>11} {'tempo s':>9}"
     )
     linhas: list[dict[str, object]] = []
     for n in tamanhos:
@@ -289,7 +312,7 @@ def experimento_escala(tempo_limite: int, tamanhos: list[int]) -> Path:
                 "status": res.status,
                 "objetivo": _arredondar(res.objetivo),
                 "limite_inferior": _arredondar(res.limite_inferior),
-                "gap_percentual": _arredondar(res.gap_percentual),
+                "gap_percentual": _valor_csv_gap(res.gap_percentual),
                 "tempo_s": round(res.tempo_s, 3),
             }
         )
@@ -307,7 +330,7 @@ def experimento_mtz(tempo_limite: int, tamanhos: list[int]) -> Path:
     print(f"\n=== MTZ LIGADO x DESLIGADO (limite de {tempo_limite} s) ===")
     print(
         f"{'n':>4} {'seed':>5} {'MTZ':<5} {'restr':>8} {'status':<12} "
-        f"{'objetivo':>12} {'lim.inf.':>12} {'gap %':>8} {'tempo s':>9}"
+        f"{'objetivo':>12} {'lim.inf.':>12} {'gap %':>11} {'tempo s':>9}"
     )
     linhas: list[dict[str, object]] = []
     for n in tamanhos:
@@ -333,7 +356,7 @@ def experimento_mtz(tempo_limite: int, tamanhos: list[int]) -> Path:
                         "otimo_provado": res.otimo_provado,
                         "objetivo": _arredondar(res.objetivo),
                         "limite_inferior": _arredondar(res.limite_inferior),
-                        "gap_percentual": _arredondar(res.gap_percentual),
+                        "gap_percentual": _valor_csv_gap(res.gap_percentual),
                         "tempo_s": round(res.tempo_s, 3),
                     }
                 )
@@ -393,7 +416,7 @@ def experimento_edd(tempo_limite: int, tamanhos: list[int]) -> Path:
                 "status_pli": res.status,
                 "otimo_provado": res.otimo_provado,
                 "objetivo_pli": _arredondar(res.objetivo),
-                "gap_percentual": _arredondar(res.gap_percentual),
+                "gap_percentual": _valor_csv_gap(res.gap_percentual),
                 "tempo_pli_s": round(res.tempo_s, 3),
                 "objetivo_edd": _arredondar(objetivo_edd),
                 "ganho_percentual_pli": _arredondar(ganho),

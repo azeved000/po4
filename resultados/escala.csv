@@ -2,5 +2,5 @@ n,seed,n_variaveis,n_restricoes,status,objetivo,limite_inferior,gap_percentual,t
 6,6,126,208,Optimal,780.1,780.1,0.0,1.794
 8,6,230,398,Optimal,620.0,620.0,0.0,22.857
 10,6,366,652,Not Solved,935.3,166.66,461.0,119.98
-20,6,1220,2279,Not Solved,4537.4,0.0,,119.237
-80,6,17780,34904,Not Solved,118298.5,0.0,,87.16
+20,6,1220,2279,Not Solved,4537.4,0.0,indefinido,119.237
+80,6,17780,34904,Not Solved,118298.5,0.0,indefinido,87.16

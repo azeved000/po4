@@ -151,16 +151,18 @@ po4/
 ├── README.md
 ├── requirements.txt
 ├── pyproject.toml          # metadados e configuração do pytest
-├── main.py                 # ponto de entrada único: resolver | validar | experimentos
+├── main.py                 # ponto de entrada único: resolver | validar |
+│                           # experimentos | legenda
 ├── rubbertech/
 │   ├── __init__.py
 │   ├── dados.py            # Item, Instancia, Tarefa, Programacao; validação,
 │   │                       # big-M, gerador, instância de referência, JSON
 │   ├── modelo.py           # construção do MILP em PuLP, execução, status e gap
 │   ├── conferencia.py      # avaliador independente, verificador, força bruta, EDD
-│   └── relatorio.py        # saída textual formatada e gráfico de Gantt
+│   └── relatorio.py        # saída textual formatada, legenda e gráfico de Gantt
 ├── testes.py               # todos os testes (pytest)
 ├── dados/                  # instâncias em JSON
+│   └── COMO_PREENCHER.md   # guia de preenchimento do JSON de entrada
 └── resultados/             # relatórios, gráficos e CSVs gerados
 ```
 
@@ -425,17 +427,34 @@ conferência ......... objetivo recalculado de forma independente difere em 0,00
 | `status` | `Optimal` = ótimo provado. `Not Solved` = o solver parou no limite de tempo com uma solução viável. `Infeasible` = nenhuma programação satisfaz as restrições. `Undefined` = não houve solução utilizável. |
 | `objetivo` | valor de `Σ w_i·T_i` (mais `Σ α_i·A_i`, se `--alfa > 0`) da melhor solução encontrada. |
 | `limite inferior` | melhor limitante inferior provado pelo *branch-and-bound*. Com `Optimal`, é igual ao objetivo. |
-| `gap` | distância relativa entre o objetivo e o limite inferior, na convenção do CBC: `(objetivo − limite inferior) / limite inferior`. Zero significa otimalidade provada; valores acima de 100% são normais quando o limite inferior ainda está fraco. |
+| `gap` | distância relativa entre o objetivo e o limite inferior, na convenção do CBC: `(objetivo − limite inferior) / limite inferior`. Zero significa otimalidade provada; valores acima de 100% são normais quando o limite inferior ainda está fraco. Quando não dá para calcular (limite inferior 0 ou indisponível), a tela e o CSV escrevem `indefinido (...)` por extenso — nunca deixam a célula vazia ou mostram `-%`. |
 | `tempo` | tempo de parede, incluindo a construção do modelo. |
 | `tamanho do modelo` | número de variáveis e de restrições efetivamente geradas. |
 | `conferência` | diferença entre o objetivo do solver e o objetivo recalculado do zero pelo avaliador independente. Deve ser 0. |
+
+**Os tempos não são reprodutíveis entre máquinas — e não precisam ser.** `tempo`
+depende do processador, da carga da máquina e da versão do CBC instalada; a
+mesma instância pode levar 14 s numa máquina e 19 s noutra, sem que isso
+signifique regressão nenhuma. O que se espera reproduzir ao rodar este projeto
+é o **objetivo** e o **status** — inclusive `otimo_provado` — não a duração. Os
+tempos impressos nos exemplos deste README e em `resultados/referencia.txt`
+são de uma execução específica, só para dar a ordem de grandeza.
 
 **Convenção de unidade do gap.** Na tela e **nos CSVs** o gap está sempre em
 **porcentagem**: a coluna se chama `gap_percentual` e `80,0` quer dizer 80%.
 Internamente `modelo.Resultado.gap` guarda a fração, e `Resultado.gap_percentual`
 faz a conversão — um único ponto de verdade, para não haver tabela com fração de
-um lado e porcentagem do outro. Quando o limite inferior é 0, o gap relativo não
-é definido e a coluna sai vazia (`-` na tela).
+um lado e porcentagem do outro.
+
+**Convenção do gap indefinido.** Quando o limite inferior é 0 (ou indisponível),
+o gap relativo não é definido — e isso **não é um erro de formatação**: é o
+achado central da seção 8, o *branch-and-bound* não conseguiu provar nenhum
+limitante além do trivial. Por isso nem a tela nem o CSV deixam a célula vazia
+ou escrevem só um traço (`-%`, que lê como número que falhou a calcular): a
+tela escreve `indefinido (limite inferior = 0)` (ou `indefinido (limite
+inferior indisponível)`), e a coluna `gap_percentual` do CSV grava a palavra
+`indefinido` por extenso. Célula vazia em CSV é ambígua com dado faltando; a
+ausência de gap aqui é informação, não lacuna.
 
 **`status = Not Solved` com objetivo preenchido não é solução ótima.** É uma
 solução viável encontrada dentro do limite de tempo — um limitante superior. O
@@ -444,16 +463,19 @@ faixa. Nesse caso o relatório imprime, destacado, o limite que foi atingido:
 
 ```
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-ATENÇÃO: atingiu o limite de 300 s: a solução abaixo é VIÁVEL,
-mas NÃO é comprovadamente ótima. O ótimo verdadeiro está entre o
-limite inferior e o objetivo mostrados acima; o gap mede essa
-distância. Para tentar fechar o gap, use --tempo-limite com um valor
-maior (ver 'Como alterar o limite de tempo do solver' no README).
+ATENÇÃO: atingiu o limite de 300 s: a solução abaixo é VIÁVEL, mas NÃO é
+comprovadamente ótima. O ótimo verdadeiro está entre o limite inferior e o objetivo
+mostrados acima; o gap mede essa distância. Para tentar fechar o gap, use
+--tempo-limite com um valor maior (ver 'Como alterar o limite de tempo do solver' no
+README).
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ```
 
 O valor no aviso é o `--tempo-limite` efetivamente usado naquela execução, não
-um número fixo. Ver "Como alterar o limite de tempo do solver" na seção 4.
+um número fixo. A quebra de linha é automática (`textwrap.fill`, na mesma
+largura das réguas do relatório), então acompanha qualquer mudança futura
+dessa largura sem precisar recortar a frase à mão. Ver "Como alterar o limite
+de tempo do solver" na seção 4.
 
 Na tabela de programação, cada linha de item se lê assim:
 
@@ -628,14 +650,14 @@ Medido:
 | 6 | 126 | 208 | Optimal | 780,10 | 780,10 | 0,00 | 1,9 |
 | 8 | 230 | 398 | Optimal | 620,00 | 620,00 | 0,00 | 22,9 |
 | 10 | 366 | 652 | Not Solved | 935,30 | 166,66 | 461,00 | 120,0 |
-| 20 | 1220 | 2279 | Not Solved | 4 537,40 | 0,00 | — | 119,2 |
-| 80 | 17780 | 34904 | Not Solved | 118 298,50 | 0,00 | — | 87,4 |
+| 20 | 1220 | 2279 | Not Solved | 4 537,40 | 0,00 | indefinido | 119,2 |
+| 80 | 17780 | 34904 | Not Solved | 118 298,50 | 0,00 | indefinido | 87,4 |
 
 **A fronteira é entre 8 e 10 itens.** Com 8 itens o ótimo é provado em 23 s; com
 10 o solver esgota os 120 s com um limite inferior de 166,66 contra um
 incumbente de 935,30. De 20 itens em diante o limite inferior nem sai de zero, e
-o gap relativo deixa de ser definido (coluna vazia). O `objetivo` dessas linhas
-é um **limitante superior**, não o ótimo.
+o gap relativo deixa de ser definido (`indefinido` na coluna). O `objetivo`
+dessas linhas é um **limitante superior**, não o ótimo.
 
 O tempo de 87 s em `n = 80` não contradiz o limite de 120 s: nessa escala boa
 parte do orçamento vai na construção e na escrita do modelo de 17 780 variáveis,
