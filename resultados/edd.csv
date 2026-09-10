@@ -8,9 +8,9 @@ n,seed,status_pli,otimo_provado,objetivo_pli,gap_percentual,tempo_pli_s,objetivo
 10,6,Not Solved,False,935.3,461.0,119.974,559.9,-67.05,8,179.6
 10,7,Not Solved,False,437.3,917.0,119.964,641.8,31.86,7,135.4
 10,8,Not Solved,False,1238.7,194.0,119.948,1546.4,19.9,9,137.0
-20,6,Not Solved,False,4537.4,,119.238,737.0,-515.66,14,439.3
-20,7,Not Solved,False,4640.2,,119.243,1129.2,-310.93,15,412.8
-20,8,Not Solved,False,6730.3,,119.227,2415.4,-178.64,13,373.0
-80,6,Not Solved,False,118298.5,,88.552,9479.7,-1147.91,51,2395.0
-80,7,Not Solved,False,130820.4,,82.413,3752.7,-3386.03,47,2310.5
-80,8,Not Solved,False,80811.6,,88.819,2023.4,-3893.85,47,2118.1
+20,6,Not Solved,False,4537.4,indefinido,119.238,737.0,-515.66,14,439.3
+20,7,Not Solved,False,4640.2,indefinido,119.243,1129.2,-310.93,15,412.8
+20,8,Not Solved,False,6730.3,indefinido,119.227,2415.4,-178.64,13,373.0
+80,6,Not Solved,False,118298.5,indefinido,88.552,9479.7,-1147.91,51,2395.0
+80,7,Not Solved,False,130820.4,indefinido,82.413,3752.7,-3386.03,47,2310.5
+80,8,Not Solved,False,80811.6,indefinido,88.819,2023.4,-3893.85,47,2118.1

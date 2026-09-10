@@ -61,6 +61,22 @@ def _numero(valor: float | None, casas: int = 2, vazio: str = "-") -> str:
     return f"{valor:,.{casas}f}".replace(",", " ").replace(".", ",")
 
 
+def texto_gap(gap_percentual: float | None, limite_inferior: float | None = None) -> str:
+    """Texto do indicador de gap: porcentagem, ou ``indefinido`` com o motivo.
+
+    Gap indefinido **não é falha de formatação** — é o achado central dos
+    experimentos de escala (seção 8 do README): o *branch-and-bound* não
+    conseguiu provar nenhum limitante além do trivial. Escrever ``-%`` faz
+    parecer um número que falhou ao ser calculado; escrever por extenso deixa
+    claro que a ausência de informação é o próprio resultado.
+    """
+    if gap_percentual is not None:
+        return f"{_numero(gap_percentual)}%"
+    if limite_inferior == 0:
+        return "indefinido (limite inferior = 0)"
+    return "indefinido (limite inferior indisponível)"
+
+
 def metricas(prog: Programacao, inst: Instancia | None = None) -> dict[str, object]:
     """Indicadores agregados de uma programação, para o relatório.
 
@@ -145,7 +161,7 @@ def formatar_resultado(res: Resultado, divergencia: float | None = None) -> str:
         f"({EXPLICACAO_STATUS.get(res.status, '?')})",
         f"objetivo ............ {_numero(res.objetivo)}",
         f"limite inferior ..... {_numero(res.limite_inferior)}",
-        f"gap ................. {_numero(res.gap_percentual)}%",
+        f"gap ................. {texto_gap(res.gap_percentual, res.limite_inferior)}",
         f"tempo ............... {_numero(res.tempo_s)} s",
         f"tamanho do modelo ... {res.n_variaveis} variáveis, "
         f"{res.n_restricoes} restrições",
@@ -164,14 +180,24 @@ def formatar_resultado(res: Resultado, divergencia: float | None = None) -> str:
         # Destacado com régua própria: é a informação mais fácil de passar
         # despercebida na saída inteira — sem ela, "Not Solved" com um objetivo
         # preenchido parece, à primeira vista, uma solução como outra qualquer.
+        # A quebra de linha é automática (textwrap.fill, na mesma LARGURA das
+        # réguas) para acompanhar qualquer mudança futura de largura, em vez de
+        # cortar a frase manualmente em posições arbitrárias.
+        aviso = (
+            f"ATENÇÃO: atingiu o limite de {limite_txt}: a solução abaixo é "
+            "VIÁVEL, mas NÃO é comprovadamente ótima. O ótimo verdadeiro está "
+            "entre o limite inferior e o objetivo mostrados acima; o gap mede "
+            "essa distância. Para tentar fechar o gap, use --tempo-limite com "
+            "um valor maior (ver 'Como alterar o limite de tempo do solver' "
+            "no README)."
+        )
         linhas += [
             "",
             _regua("!"),
-            f"ATENÇÃO: atingiu o limite de {limite_txt}: a solução abaixo é VIÁVEL,",
-            "mas NÃO é comprovadamente ótima. O ótimo verdadeiro está entre o",
-            "limite inferior e o objetivo mostrados acima; o gap mede essa",
-            "distância. Para tentar fechar o gap, use --tempo-limite com um valor",
-            "maior (ver 'Como alterar o limite de tempo do solver' no README).",
+            # break_on_hyphens=False: sem isso, "--tempo-limite" quebraria no
+            # meio do nome da opção ("--tempo-\nlimite"), que é pior do que o
+            # corte manual que esta função substitui.
+            textwrap.fill(aviso, width=LARGURA, break_on_hyphens=False),
             _regua("!"),
         ]
     linhas.append(_regua("="))
@@ -369,11 +395,12 @@ CAMPOS_SAIDA_RESULTADO: list[tuple[str, str, str]] = [
     ),
     (
         "gap",
-        "porcentagem, ou '-'",
+        "porcentagem, ou 'indefinido (...)'",
         "(objetivo − limite inferior) / limite inferior, em %. Zero = ótimo "
-        "provado. INDEFINIDO ('-' na tela) quando o limite inferior é 0: falta "
-        "de informação sobre a qualidade da solução, e não indício de solução "
-        "ruim.",
+        "provado. INDEFINIDO quando o limite inferior é 0 (ou indisponível): "
+        "falta de informação sobre a qualidade da solução, e não indício de "
+        "solução ruim. A tela e o CSV escrevem a palavra por extenso, nunca "
+        "deixam a célula vazia.",
     ),
     (
         "tempo",
@@ -511,8 +538,9 @@ def formatar_legenda_saida() -> str:
         "Dois pontos que costumam ser lidos errado:",
         "  1. status = 'Not Solved' com objetivo preenchido é uma solução VIÁVEL,",
         "     não a ótima — o objetivo é um limitante superior.",
-        "  2. gap indefinido ('-', quando o limite inferior é 0) significa AUSÊNCIA",
-        "     de informação sobre a qualidade da solução, não solução ruim.",
+        "  2. gap indefinido ('indefinido (limite inferior = 0)' na tela e no",
+        "     CSV, quando o limite inferior é 0) significa AUSÊNCIA de informação",
+        "     sobre a qualidade da solução, não solução ruim.",
         _regua("="),
     ]
     return "\n".join(linhas)
