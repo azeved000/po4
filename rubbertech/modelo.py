@@ -267,8 +267,10 @@ STATUS_INDEFINIDO = "Undefined"
 
 #: Limite de tempo padrão, em segundos. Todos os experimentos do relatório usam
 #: **o mesmo** valor: comparar tabelas resolvidas com limites diferentes produz
-#: objetivos incomparáveis para o mesmo n.
-TEMPO_LIMITE_PADRAO = 120
+#: objetivos incomparáveis para o mesmo n. Vale para os três subcomandos
+#: (``resolver``, ``validar``, ``experimentos``); ``--tempo-limite`` sobrepõe por
+#: execução. Ver "Como alterar o limite de tempo do solver" no README.
+TEMPO_LIMITE_PADRAO = 300
 
 
 @dataclass
@@ -287,6 +289,10 @@ class Resultado:
             fração**. Use :attr:`gap_percentual` para exibir ou gravar.
         sequencias: ``linha -> ordem dos itens``. É tudo o que sai do solver; o
             objetivo correspondente é recalculado por :mod:`conferencia`.
+        tempo_limite: o limite de tempo (segundos) com que o solver foi chamado
+            — não o tempo que ele de fato gastou (``tempo_s``). É o que permite
+            ao relatório dizer *qual* limite foi atingido quando ``status ==
+            "Not Solved"``, em vez de só que algum limite foi atingido.
     """
 
     status: str
@@ -299,6 +305,7 @@ class Resultado:
     sequencias: dict[str, list[str]] | None
     #: Mensagem crua do solver ("Stopped on time limit" etc.), para depuração.
     mensagem: str = ""
+    tempo_limite: int | None = None
 
     @property
     def otimo_provado(self) -> bool:
@@ -419,6 +426,7 @@ def resolver(
             n_restricoes=n_restricoes,
             sequencias=None,
             mensagem=mensagem or status_bruto,
+            tempo_limite=tempo_limite,
         )
 
     objetivo = pulp.value(prob.objective)
@@ -447,4 +455,5 @@ def resolver(
         n_restricoes=n_restricoes,
         sequencias=extrair_sequencias(inst, variaveis),
         mensagem=mensagem or status_bruto,
+        tempo_limite=tempo_limite,
     )
