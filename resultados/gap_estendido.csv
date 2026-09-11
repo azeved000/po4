@@ -1,0 +1,7 @@
+n,seed,usar_mtz,status,objetivo,limite_inferior,gap_percentual,tempo_s,otimo_provado,objetivo_edd,observacao
+10,6,False,Optimal,450.8,450.8,0.0,319.112,True,559.9,Optimal solution found
+10,7,False,Optimal,263.0,263.0,0.0,789.239,True,641.8,Optimal solution found
+10,6,True,Optimal,450.8,450.8,0.0,839.516,True,559.9,Optimal solution found
+10,7,True,Optimal,263.0,263.0,0.0,1356.076,True,641.8,Optimal solution found
+10,8,True,Not Solved,1135.5,700.6,62.0,1800.669,False,1546.4,Stopped on time limit
+10,8,False,Not Solved,1132.1,758.6,49.0,1800.991,False,1546.4,Stopped on time limit
