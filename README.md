@@ -201,7 +201,11 @@ divergiriam.
 
 ## 4. Como instalar e rodar
 
+Requer **Python 3.11 ou mais recente** (`requires-python` no `pyproject.toml`).
+
 ```bash
+git clone https://github.com/azeved000/po4.git
+cd po4
 python -m venv .venv
 source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -210,6 +214,17 @@ pip install -r requirements.txt
 O solver CBC vem junto com o PuLP; não há nada mais para instalar. Não é preciso
 instalar o pacote: `main.py` e `testes.py` ficam na raiz, ao lado de
 `rubbertech/`.
+
+**Para confirmar que a instalação funcionou**, rode os testes ou a instância de
+referência:
+
+```bash
+python -m pytest testes.py -q      # deve terminar em "26 passed"
+python main.py resolver --instancia referencia   # deve terminar em Optimal, objetivo 144,00
+```
+
+Nenhuma configuração extra é necessária no Windows: a saída UTF-8 do console é
+ajustada automaticamente por `relatorio.configurar_saida()`.
 
 Os quatro subcomandos:
 
@@ -370,6 +385,16 @@ explicação a divergir com o tempo:
 
 ### b) Gerador paramétrico
 
+**Nomenclatura dos itens.** Nos exemplos deste README, na instância de
+referência e no gerador abaixo, os ids seguem um prefixo de duas letras mais
+um número: `TX` para têxtil (roda em qualquer linha elegível) e `CA` para
+cabo de aço (só roda na linha dedicada — a última das `m` linhas usadas). O
+número é só um índice sequencial, sem outro significado; `TX6` não é
+diferente de `TX1` a não ser pelos seus próprios `p`, `d` e `w`. Essa
+convenção é implementada em `dados.PREFIXO_CABO_ACO`/`PREFIXO_TEXTIL` e usada
+por `dados.gerar()`, mas **não é exigida pelo formato JSON** — o `id` de um
+item pode ser qualquer string única (ver seção 5a).
+
 Há **um** gerador determinístico, `dados.gerar`:
 
 ```python
@@ -526,7 +551,8 @@ das quais passa pelo solver.
 
 ### A instância de referência
 
-8 itens e 4 linhas. `CA1` e `CA2` têm cabo de aço e só rodam em `L4`.
+8 itens e 4 linhas. `CA1` e `CA2` têm cabo de aço e só rodam em `L4` (`TX` =
+têxtil, `CA` = cabo de aço; ver a nomenclatura na seção 5b).
 
 | item | L1 | L2 | L3 | L4 | `d` | `w` |
 |---|---|---|---|---|---|---|
@@ -552,7 +578,8 @@ L3: TX8 -> TX5
 L4: CA1 -> CA2
 ```
 
-O ponto que interessa: o ótimo deixa **`TX5` atrasar 25 u.t.** porque seu peso é
+O ponto que interessa: o ótimo deixa **`TX5` atrasar 25 unidades de tempo
+(u.t.)** porque seu peso é
 1, e **protege `TX6`** (peso 6) e `TX4` (peso 3), que terminam no prazo. Uma
 programação que espalhasse o atraso igualmente entre os itens estaria
 minimizando o atraso *total*, não o atraso *ponderado* — é o teste que separa
