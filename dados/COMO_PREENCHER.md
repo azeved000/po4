@@ -44,6 +44,13 @@ Cinco pontos que costumam causar erro:
 5. **`w` é adimensional** e só a proporção entre os pesos importa: dobrar todos
    os pesos dobra o objetivo sem mudar a programação ótima.
 
+**Sobre os ids dos exemplos (`TX1`, `CA1`, ...).** O `id` de um item pode ser
+qualquer string única — o formato não exige nenhum padrão. Os exemplos deste
+guia (e o gerador `dados.gerar`) seguem a convenção da fábrica real: prefixo
+`TX` para têxtil, `CA` para cabo de aço, seguido de um número sequencial sem
+outro significado — `CA1` não é "mais importante" que `CA2`, só foi declarado
+primeiro.
+
 ---
 
 ## 2. Exemplo completo (3 itens, 2 linhas)
